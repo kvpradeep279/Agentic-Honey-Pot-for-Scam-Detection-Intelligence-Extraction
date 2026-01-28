@@ -124,9 +124,9 @@ async def health_check():
     }
 
 
-@app.post("/honeypot", response_model=HoneypotResponse)
+@app.post("/honeypot")
 async def honeypot_endpoint(
-    request: HoneypotRequest,
+    request: Request,
     x_api_key: str = Header(None)
 ):
     """
@@ -136,26 +136,77 @@ async def honeypot_endpoint(
     
     Flow:
     1. Validate API key
-    2. Get/create session for this conversation
+    2. Parse and validate request body
     3. Detect if message is a scam
     4. Generate agent response if scam detected
     5. Extract intelligence from message
-    6. Update session state
-    7. Check if callback should be sent
-    8. Return response
+    6. Return response
     """
     
     # Step 1: Verify API key
     verify_api_key(x_api_key)
     
-    # Step 2: Get or create session
-    session = session_manager.get_or_create_session(request.sessionId)
+    # Step 2: Parse request body flexibly
+    try:
+        body = await request.json()
+    except Exception as e:
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "detail": f"Invalid JSON: {str(e)}"}
+        )
+    
+    # Extract fields with defaults for flexibility
+    session_id = body.get("sessionId", "default-session")
+    message_data = body.get("message", {})
+    conversation_history = body.get("conversationHistory", [])
+    metadata = body.get("metadata", {})
+    
+    # Handle different message formats
+    if isinstance(message_data, dict):
+        message_text = message_data.get("text", "")
+        message_sender = message_data.get("sender", "scammer")
+        message_timestamp = message_data.get("timestamp", "")
+    elif isinstance(message_data, str):
+        message_text = message_data
+        message_sender = "scammer"
+        message_timestamp = ""
+    else:
+        message_text = str(body.get("text", body.get("message", "")))
+        message_sender = "scammer"
+        message_timestamp = ""
+    
+    # If no message found, return error
+    if not message_text:
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "detail": "No message text provided"}
+        )
+    
+    # Create Message object
+    current_message = Message(
+        sender=message_sender,
+        text=message_text,
+        timestamp=message_timestamp or "2026-01-28T00:00:00Z"
+    )
+    
+    # Parse conversation history
+    parsed_history = []
+    for msg in conversation_history:
+        if isinstance(msg, dict):
+            parsed_history.append(Message(
+                sender=msg.get("sender", "scammer"),
+                text=msg.get("text", ""),
+                timestamp=msg.get("timestamp", "")
+            ))
+    
+    # Step 3: Get or create session
+    session = session_manager.get_or_create_session(session_id)
     session.add_message()
     
-    # Step 3: Detect scam intent
+    # Step 4: Detect scam intent
     is_scam, confidence, reasons = scam_detector.detect(
-        request.message.text,
-        request.conversationHistory
+        current_message.text,
+        parsed_history
     )
     
     # Update session with detection results
@@ -165,31 +216,31 @@ async def honeypot_endpoint(
         for reason in reasons:
             session.add_agent_note(reason)
     
-    # Step 4: Generate agent response if scam detected
+    # Step 5: Generate agent response if scam detected
     agent_response = None
     if session.scam_detected:
         agent_response = honeypot_agent.generate_response(
-            current_message=request.message,
-            conversation_history=request.conversationHistory,
-            metadata=request.metadata
+            current_message=current_message,
+            conversation_history=parsed_history,
+            metadata=Metadata(**metadata) if metadata else None
         )
         
         # Analyze scammer tactics for notes
-        tactics = honeypot_agent.analyze_scammer_tactics(request.message.text)
+        tactics = honeypot_agent.analyze_scammer_tactics(current_message.text)
         for tactic in tactics:
             session.add_agent_note(tactic)
     
-    # Step 5: Extract intelligence from current message
-    new_intelligence = scam_detector.extract_intelligence(request.message.text)
+    # Step 6: Extract intelligence from current message
+    new_intelligence = scam_detector.extract_intelligence(current_message.text)
     session.merge_intelligence(new_intelligence)
     
     # Also extract from conversation history if present
-    for hist_msg in request.conversationHistory:
+    for hist_msg in parsed_history:
         if hist_msg.sender == "scammer":
             hist_intel = scam_detector.extract_intelligence(hist_msg.text)
             session.merge_intelligence(hist_intel)
     
-    # Step 6: Build response
+    # Step 7: Build response
     response = HoneypotResponse(
         status="success",
         scamDetected=session.scam_detected,
@@ -202,7 +253,7 @@ async def honeypot_endpoint(
         agentNotes=session.get_agent_notes_summary()
     )
     
-    # Step 7: Check if we should send callback
+    # Step 8: Check if we should send callback
     if callback_handler.should_send_callback(session):
         # Send callback in background (don't block response)
         asyncio.create_task(
