@@ -1,0 +1,17 @@
+# ===========================================
+# Render.com Deployment Configuration
+# ===========================================
+# This file tells Render how to deploy your API
+# ===========================================
+
+services:
+  - type: web
+    name: honeypot-api
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: HONEYPOT_API_KEY
+        sync: false  # You'll set this in Render dashboard
+      - key: GEMINI_API_KEY
+        sync: false  # You'll set this in Render dashboard
