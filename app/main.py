@@ -22,7 +22,9 @@ from app.models import (
     HoneypotRequest, 
     HoneypotResponse, 
     EngagementMetrics, 
-    ExtractedIntelligence
+    ExtractedIntelligence,
+    Message,
+    Metadata
 )
 from app.scam_detector import scam_detector
 from app.agent import honeypot_agent
@@ -158,12 +160,13 @@ async def honeypot_endpoint(
     # Extract fields with defaults for flexibility
     session_id = body.get("sessionId", "default-session")
     message_data = body.get("message", {})
-    conversation_history = body.get("conversationHistory", [])
-    metadata = body.get("metadata", {})
+    conversation_history = body.get("conversationHistory") or []  # Handle None
+    metadata = body.get("metadata") or {}  # Handle None
     
     # Handle different message formats
     if isinstance(message_data, dict):
-        message_text = message_data.get("text", "")
+        # Support both 'text' and 'content' field names
+        message_text = message_data.get("text") or message_data.get("content", "")
         message_sender = message_data.get("sender", "scammer")
         message_timestamp = message_data.get("timestamp", "")
     elif isinstance(message_data, str):
