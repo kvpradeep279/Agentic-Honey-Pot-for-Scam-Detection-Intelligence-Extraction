@@ -79,9 +79,19 @@ Remember: You are gathering intelligence. The longer the conversation, the bette
         
         if config.GEMINI_API_KEY:
             genai.configure(api_key=config.GEMINI_API_KEY)
-            # Use gemini-2.0-flash (latest) or gemini-pro as fallback
-            self.model = genai.GenerativeModel('gemini-2.0-flash')
-            self.ai_available = True
+            # Try multiple models in order of preference
+            # Different models may have separate quotas
+            models_to_try = ['gemini-1.5-flash', 'gemini-pro', 'gemini-2.0-flash']
+            self.model = None
+            for model_name in models_to_try:
+                try:
+                    self.model = genai.GenerativeModel(model_name)
+                    print(f"✅ Using Gemini model: {model_name}")
+                    break
+                except Exception as e:
+                    print(f"⚠️ Model {model_name} not available: {e}")
+            
+            self.ai_available = self.model is not None
         else:
             self.ai_available = False
             print("⚠️ Warning: No GEMINI_API_KEY set. Using fallback responses.")
