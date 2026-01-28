@@ -11,7 +11,8 @@
 
 # Problem statement docs (not needed for deployment)
 Documents/
-*.txt
+# Don't ignore requirements.txt - it's needed for deployment!
+# *.txt  # REMOVED - was blocking requirements.txt
 *.png
 
 # Python cache
