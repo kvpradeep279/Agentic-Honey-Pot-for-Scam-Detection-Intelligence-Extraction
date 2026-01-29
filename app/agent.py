@@ -80,12 +80,12 @@ Remember: You are gathering intelligence. The longer the conversation, the bette
         if config.GEMINI_API_KEY:
             genai.configure(api_key=config.GEMINI_API_KEY)
             # Try multiple models - updated for 2026 API
-            # Use model names from genai.list_models()
+            # gemini-2.5-flash first (less likely to hit quota)
             models_to_try = [
-                'gemini-2.0-flash',       # Fast and free
-                'gemini-2.5-flash',       # Latest flash
-                'gemini-flash-latest',    # Latest flash alias
+                'gemini-2.5-flash',       # Try this first - latest
+                'gemini-flash-latest',    # Alias
                 'gemini-2.0-flash-lite',  # Lite version
+                'gemini-2.0-flash',       # May have quota issues
             ]
             self.model = None
             self.ai_available = False
