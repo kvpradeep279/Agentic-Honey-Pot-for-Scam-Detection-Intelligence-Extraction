@@ -163,12 +163,20 @@ async def honeypot_endpoint(
     conversation_history = body.get("conversationHistory") or []  # Handle None
     metadata = body.get("metadata") or {}  # Handle None
     
+    # Helper to convert timestamp to string (handles int, float, string)
+    def to_timestamp_str(ts):
+        if ts is None:
+            return ""
+        if isinstance(ts, (int, float)):
+            return str(ts)  # Convert Unix timestamp to string
+        return str(ts)
+    
     # Handle different message formats
     if isinstance(message_data, dict):
         # Support both 'text' and 'content' field names
         message_text = message_data.get("text") or message_data.get("content", "")
         message_sender = message_data.get("sender", "scammer")
-        message_timestamp = message_data.get("timestamp", "")
+        message_timestamp = to_timestamp_str(message_data.get("timestamp", ""))
     elif isinstance(message_data, str):
         message_text = message_data
         message_sender = "scammer"
@@ -198,8 +206,8 @@ async def honeypot_endpoint(
         if isinstance(msg, dict):
             parsed_history.append(Message(
                 sender=msg.get("sender", "scammer"),
-                text=msg.get("text", ""),
-                timestamp=msg.get("timestamp", "")
+                text=msg.get("text") or msg.get("content", ""),
+                timestamp=to_timestamp_str(msg.get("timestamp", ""))
             ))
     
     # Step 3: Get or create session
