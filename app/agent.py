@@ -79,19 +79,38 @@ Remember: You are gathering intelligence. The longer the conversation, the bette
         
         if config.GEMINI_API_KEY:
             genai.configure(api_key=config.GEMINI_API_KEY)
-            # Try multiple models in order of preference
-            # Different models may have separate quotas
-            models_to_try = ['gemini-1.5-flash', 'gemini-pro', 'gemini-2.0-flash']
+            # Try multiple models - use correct model names
+            # See: https://ai.google.dev/gemini-api/docs/models
+            models_to_try = [
+                'gemini-1.5-flash',    # Free tier model
+                'gemini-1.5-pro',      # Pro model
+                'gemini-2.0-flash-exp',  # Experimental
+            ]
             self.model = None
+            self.ai_available = False
+            
             for model_name in models_to_try:
                 try:
-                    self.model = genai.GenerativeModel(model_name)
-                    print(f"✅ Using Gemini model: {model_name}")
-                    break
+                    test_model = genai.GenerativeModel(model_name)
+                    # Test if model actually works with a quick call
+                    test_response = test_model.generate_content(
+                        "Hi",
+                        generation_config=genai.types.GenerationConfig(
+                            max_output_tokens=5
+                        )
+                    )
+                    if test_response.text:
+                        self.model = test_model
+                        self.ai_available = True
+                        print(f"✅ Gemini model working: {model_name}")
+                        break
                 except Exception as e:
-                    print(f"⚠️ Model {model_name} not available: {e}")
+                    error_msg = str(e)[:80]
+                    print(f"⚠️ Model {model_name}: {error_msg}")
+                    continue
             
-            self.ai_available = self.model is not None
+            if not self.ai_available:
+                print("⚠️ No Gemini models available. Using fallback responses.")
         else:
             self.ai_available = False
             print("⚠️ Warning: No GEMINI_API_KEY set. Using fallback responses.")
