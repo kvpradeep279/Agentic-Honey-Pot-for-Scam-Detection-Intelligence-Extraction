@@ -79,12 +79,13 @@ Remember: You are gathering intelligence. The longer the conversation, the bette
         
         if config.GEMINI_API_KEY:
             genai.configure(api_key=config.GEMINI_API_KEY)
-            # Try multiple models - use correct model names
-            # See: https://ai.google.dev/gemini-api/docs/models
+            # Try multiple models - updated for 2026 API
+            # Use model names from genai.list_models()
             models_to_try = [
-                'gemini-1.5-flash',    # Free tier model
-                'gemini-1.5-pro',      # Pro model
-                'gemini-2.0-flash-exp',  # Experimental
+                'gemini-2.0-flash',       # Fast and free
+                'gemini-2.5-flash',       # Latest flash
+                'gemini-flash-latest',    # Latest flash alias
+                'gemini-2.0-flash-lite',  # Lite version
             ]
             self.model = None
             self.ai_available = False
