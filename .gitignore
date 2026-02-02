@@ -15,6 +15,9 @@ Documents/
 # *.txt  # REMOVED - was blocking requirements.txt
 *.png
 
+# Test files (local testing only)
+test_honeypot_cases.py
+
 # Python cache
 __pycache__/
 *.py[cod]
