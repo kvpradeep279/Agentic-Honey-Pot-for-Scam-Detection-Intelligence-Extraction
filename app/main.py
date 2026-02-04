@@ -124,6 +124,8 @@ async def health_check():
     }
 
 
+# Support both "/" and "/honeypot" endpoints for flexibility
+@app.post("/")
 @app.post("/honeypot")
 async def honeypot_endpoint(
     request: Request,
@@ -133,6 +135,7 @@ async def honeypot_endpoint(
     Main honeypot endpoint - receives scam messages.
     
     This is the endpoint you submit to GUVI!
+    Supports both root "/" and "/honeypot" paths.
     
     Flow:
     1. Validate API key
