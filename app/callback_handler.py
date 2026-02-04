@@ -28,6 +28,8 @@ class CallbackHandler:
     
     def __init__(self):
         self.callback_url = config.GUVI_CALLBACK_URL
+        # Track sent callbacks to prevent duplicates (even across requests)
+        self.sent_sessions = set()
     
     def should_send_callback(self, session: ConversationSession) -> bool:
         """
@@ -35,10 +37,17 @@ class CallbackHandler:
         
         WHY conditions:
         - Must have detected scam (no point reporting non-scams)
-        - Must have some engagement (not just first message)
+        - Must have meaningful engagement (sufficient turns)
+        - Must have extracted real intelligence (not just keywords)
         - Prevent duplicate callbacks
-        - Have some intelligence to report
+        
+        Per doc: "The AI Agent has completed sufficient engagement"
+        Example shows 18 messages exchanged - we should wait for substantial engagement.
         """
+        
+        # Prevent duplicate callbacks
+        if session.session_id in self.sent_sessions:
+            return False
         
         if session.callback_sent:
             return False
@@ -46,24 +55,54 @@ class CallbackHandler:
         if not session.scam_detected:
             return False
         
-        # Wait for minimum engagement before callback
-        if session.message_count < config.MIN_TURNS_BEFORE_CALLBACK:
-            return False
-        
-        # Check if we have meaningful intelligence
+        # Check what intelligence we've gathered
         intel = session.intelligence
-        has_intelligence = (
-            len(intel.bankAccounts) > 0 or
-            len(intel.upiIds) > 0 or
-            len(intel.phishingLinks) > 0 or
-            len(intel.phoneNumbers) > 0 or
-            len(intel.suspiciousKeywords) > 2
+        
+        # Count "real" extracted data (not just keywords)
+        real_intel_count = (
+            len(intel.bankAccounts) +
+            len(intel.upiIds) +
+            len(intel.phishingLinks) +
+            len(intel.phoneNumbers)
         )
         
-        # Send if max turns reached OR we have good intelligence
-        max_turns_reached = session.message_count >= config.MAX_CONVERSATION_TURNS
+        has_real_intel = real_intel_count > 0
+        has_multiple_intel = real_intel_count >= 2  # Multiple pieces of real intel
+        has_rich_intel = real_intel_count >= 3  # Rich intelligence (3+ items)
+        has_keywords = len(intel.suspiciousKeywords) >= 2
         
-        return max_turns_reached or has_intelligence
+        # Strategy (adjusted for 18-message conversations):
+        # 1. Force send at max turns (35 = ~18 scammer messages)
+        # 2. With rich intel (3+ items) - send at 10+ turns (~5 scammer msgs)
+        # 3. With multiple intel (2 items) - send at 15+ turns (~8 scammer msgs)
+        # 4. With single real intel - send at 20+ turns (~10 scammer msgs)
+        # 5. Keywords only - send at 25+ turns (~13 scammer msgs)
+        
+        msg_count = session.message_count
+        max_turns_reached = msg_count >= config.MAX_CONVERSATION_TURNS
+        
+        if max_turns_reached:
+            # Force send at max turns
+            return True
+        
+        if has_rich_intel and msg_count >= 10:
+            # Rich intel (3+ items) + decent engagement
+            return True
+        
+        if has_multiple_intel and msg_count >= 15:
+            # Multiple intel items (2) + good engagement
+            return True
+        
+        if has_real_intel and msg_count >= 20:
+            # Single real intel + substantial engagement
+            return True
+        
+        if has_keywords and msg_count >= 25:
+            # Only keywords? Need very long engagement
+            return True
+        
+        # Keep engaging - not ready yet
+        return False
     
     def send_callback(self, session: ConversationSession) -> bool:
         """
@@ -73,9 +112,13 @@ class CallbackHandler:
             True if callback was successful, False otherwise
         """
         
-        if session.callback_sent:
+        if session.callback_sent or session.session_id in self.sent_sessions:
             print(f"⚠️ Callback already sent for session {session.session_id}")
             return False
+        
+        # Mark as sent immediately to prevent race conditions
+        self.sent_sessions.add(session.session_id)
+        session.callback_sent = True
         
         try:
             # Build payload matching GUVI's expected format
@@ -106,7 +149,6 @@ class CallbackHandler:
             
             if response.status_code == 200:
                 print(f"✅ Callback successful for session {session.session_id}")
-                session.callback_sent = True
                 return True
             else:
                 print(f"❌ Callback failed: {response.status_code} - {response.text}")
@@ -126,8 +168,12 @@ class CallbackHandler:
         - Better for concurrent requests
         """
         
-        if session.callback_sent:
+        if session.callback_sent or session.session_id in self.sent_sessions:
             return False
+        
+        # Mark as sent immediately to prevent race conditions
+        self.sent_sessions.add(session.session_id)
+        session.callback_sent = True
         
         try:
             payload = {
@@ -144,6 +190,9 @@ class CallbackHandler:
                 "agentNotes": session.get_agent_notes_summary()
             }
             
+            print(f"📤 [ASYNC] Sending callback for session {session.session_id}")
+            print(f"   Payload: {payload}")
+            
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     self.callback_url,
@@ -153,8 +202,10 @@ class CallbackHandler:
                 )
             
             if response.status_code == 200:
-                session.callback_sent = True
+                print(f"✅ [ASYNC] Callback successful for session {session.session_id}")
                 return True
+            else:
+                print(f"❌ [ASYNC] Callback failed: {response.status_code}")
             return False
             
         except Exception as e:

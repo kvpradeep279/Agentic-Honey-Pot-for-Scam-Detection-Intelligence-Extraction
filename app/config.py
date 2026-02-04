@@ -37,8 +37,10 @@ class Config:
     GUVI_CALLBACK_URL: str = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
     
     # Agent settings
-    MAX_CONVERSATION_TURNS: int = 10  # Maximum messages before ending engagement
-    MIN_TURNS_BEFORE_CALLBACK: int = 3  # Minimum turns before sending callback
+    # Doc example shows 18 messages (~36 total with agent replies)
+    # We want to wait for enough intel before sending callback
+    MAX_CONVERSATION_TURNS: int = 35  # Force callback after this many messages
+    MIN_TURNS_BEFORE_CALLBACK: int = 10  # Minimum for rich intel
     
     # Scam detection threshold (0.0 to 1.0)
     SCAM_THRESHOLD: float = 0.6

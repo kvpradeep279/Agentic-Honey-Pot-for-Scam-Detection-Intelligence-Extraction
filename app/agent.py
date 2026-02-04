@@ -79,13 +79,12 @@ Remember: You are gathering intelligence. The longer the conversation, the bette
         
         if config.GEMINI_API_KEY:
             genai.configure(api_key=config.GEMINI_API_KEY)
-            # Try multiple models - updated for 2026 API
-            # gemini-2.5-flash first (less likely to hit quota)
+            # Try multiple models - prioritize lite models with higher free tier quota
             models_to_try = [
-                'gemini-2.5-flash',       # Try this first - latest
-                'gemini-flash-latest',    # Alias
-                'gemini-2.0-flash-lite',  # Lite version
-                'gemini-2.0-flash',       # May have quota issues
+                'gemini-flash-lite-latest',  # Highest free tier quota
+                'gemini-2.5-flash-lite',     # Lite version of 2.5
+                'gemini-2.0-flash-lite',     # Lite version of 2.0
+                'gemini-2.5-flash',          # Full version (lower quota)
             ]
             self.model = None
             self.ai_available = False
@@ -146,12 +145,20 @@ Remember: You are gathering intelligence. The longer the conversation, the bette
                 context,
                 generation_config=genai.types.GenerationConfig(
                     temperature=0.8,  # Slightly creative for natural responses
-                    max_output_tokens=150,  # Keep responses short
+                    max_output_tokens=300,  # Enough for 1-3 sentences
                 )
             )
             
+            # Debug: Check if response was blocked or truncated
+            print(f"🤖 Gemini finish_reason: {response.candidates[0].finish_reason if response.candidates else 'NO CANDIDATES'}")
+            print(f"🤖 Gemini safety_ratings: {response.candidates[0].safety_ratings if response.candidates else 'N/A'}")
+            
             # Extract and clean the response
             agent_reply = response.text.strip()
+            
+            # Debug: Print full response
+            print(f"🤖 Full Gemini response: '{agent_reply}'")
+            print(f"🤖 Response length: {len(agent_reply)} chars")
             
             # Safety check: Make sure we don't expose detection
             if self._contains_exposure_risk(agent_reply):

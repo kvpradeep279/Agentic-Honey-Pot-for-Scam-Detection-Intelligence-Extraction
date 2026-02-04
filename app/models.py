@@ -89,16 +89,15 @@ class EngagementMetrics(BaseModel):
 
 class HoneypotResponse(BaseModel):
     """
-    The response we send back to GUVI.
+    The response we send back during conversation.
     
-    This matches exactly what the problem statement requires!
+    Section 8 of problem statement: Agent output should be like:
+    {"status": "success", "reply": "Why is my account being suspended?"}
+    
+    Keep it simple - detailed data goes in the callback!
     """
     status: str = Field(default="success", description="'success' or 'error'")
-    scamDetected: bool = Field(..., description="Did we detect a scam?")
-    agentResponse: Optional[str] = Field(default=None, description="Our agent's reply to scammer")
-    engagementMetrics: EngagementMetrics = Field(default_factory=EngagementMetrics)
-    extractedIntelligence: ExtractedIntelligence = Field(default_factory=ExtractedIntelligence)
-    agentNotes: str = Field(default="", description="Summary of scammer tactics observed")
+    reply: Optional[str] = Field(default=None, description="Our agent's reply to scammer")
 
 
 # ----- Callback Model (What we send to GUVI at the end) -----

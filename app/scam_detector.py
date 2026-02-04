@@ -123,6 +123,12 @@ class ScamDetector:
         if threats_found:
             score += 0.20
             reasons.append(f"Threatening language: {', '.join(threats_found[:3])}")
+            
+            # Extra boost if threat + bank/account mentioned together
+            # "Your bank account will be blocked" is a classic scam pattern
+            if any(word in message_lower for word in ['bank', 'account', 'card', 'wallet']):
+                score += 0.15
+                reasons.append("Threatening language targeting financial assets")
         
         # ----- Check 3: Requests for Sensitive Data -----
         # WHY: Legitimate services don't ask for passwords via SMS

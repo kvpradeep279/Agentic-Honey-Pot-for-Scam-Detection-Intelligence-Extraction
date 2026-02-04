@@ -11,12 +11,22 @@
 
 # Problem statement docs (not needed for deployment)
 Documents/
-# Don't ignore requirements.txt - it's needed for deployment!
-# *.txt  # REMOVED - was blocking requirements.txt
+doc.txt
+1_ProblemStatement.txt
+2_Info.txt
+3_apiEndpointTester.txt
+5_Submission.txt
+
+# Image files
 *.png
 
 # Test files (local testing only)
 test_honeypot_cases.py
+test_local.py
+test_multiturn.py
+test_18_messages.py
+final_verification_test.py
+ultimate_final_test.py
 
 # Python cache
 __pycache__/

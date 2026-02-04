@@ -20,9 +20,7 @@ import asyncio
 
 from app.models import (
     HoneypotRequest, 
-    HoneypotResponse, 
-    EngagementMetrics, 
-    ExtractedIntelligence,
+    HoneypotResponse,
     Message,
     Metadata
 )
@@ -212,7 +210,16 @@ async def honeypot_endpoint(
     
     # Step 3: Get or create session
     session = session_manager.get_or_create_session(session_id)
-    session.add_message()
+    
+    # IMPORTANT: Calculate message count from conversation history!
+    # This handles server restarts - we use the data GUVI sends us
+    # conversationHistory contains all previous messages
+    # +1 for the current message being processed
+    actual_message_count = len(parsed_history) + 1
+    session.message_count = actual_message_count  # Update from history
+    
+    print(f"📩 Session {session_id}: Message #{actual_message_count}")
+    print(f"   Conversation history has {len(parsed_history)} previous messages")
     
     # Step 4: Detect scam intent
     is_scam, confidence, reasons = scam_detector.detect(
@@ -227,16 +234,17 @@ async def honeypot_endpoint(
         for reason in reasons:
             session.add_agent_note(reason)
     
-    # Step 5: Generate agent response if scam detected
-    agent_response = None
+    # Step 5: Generate agent response
+    # IMPORTANT: Always respond! Don't reveal detection by staying silent.
+    # Even if we don't think it's a scam, respond naturally to maintain cover.
+    agent_response = honeypot_agent.generate_response(
+        current_message=current_message,
+        conversation_history=parsed_history,
+        metadata=Metadata(**metadata) if metadata else None
+    )
+    
+    # Analyze scammer tactics for notes (only if scam detected)
     if session.scam_detected:
-        agent_response = honeypot_agent.generate_response(
-            current_message=current_message,
-            conversation_history=parsed_history,
-            metadata=Metadata(**metadata) if metadata else None
-        )
-        
-        # Analyze scammer tactics for notes
         tactics = honeypot_agent.analyze_scammer_tactics(current_message.text)
         for tactic in tactics:
             session.add_agent_note(tactic)
@@ -251,20 +259,15 @@ async def honeypot_endpoint(
             hist_intel = scam_detector.extract_intelligence(hist_msg.text)
             session.merge_intelligence(hist_intel)
     
-    # Step 7: Build response
+    # Step 7: Build simple response (as per Section 8 of problem statement)
+    # Only return status and reply - detailed data goes in callback
     response = HoneypotResponse(
         status="success",
-        scamDetected=session.scam_detected,
-        agentResponse=agent_response,
-        engagementMetrics=EngagementMetrics(
-            engagementDurationSeconds=session.get_duration_seconds(),
-            totalMessagesExchanged=session.message_count
-        ),
-        extractedIntelligence=session.intelligence,
-        agentNotes=session.get_agent_notes_summary()
+        reply=agent_response
     )
     
     # Step 8: Check if we should send callback
+    # Callback sends all the detailed intelligence to GUVI
     if callback_handler.should_send_callback(session):
         # Send callback in background (don't block response)
         asyncio.create_task(
