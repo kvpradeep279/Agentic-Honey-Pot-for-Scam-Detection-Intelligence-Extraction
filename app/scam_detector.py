@@ -214,18 +214,29 @@ class ScamDetector:
         
         # Extract phone numbers
         phone_matches = self.phone_pattern.findall(message)
-        # Format phone numbers consistently
+        # Format phone numbers consistently and extract 10-digit core
         formatted_phones = []
+        phone_numbers_10digit = []  # Track 10-digit phone numbers for filtering
         for phone in phone_matches:
             clean_phone = re.sub(r'[-\s]', '', phone)
             if len(clean_phone) >= 10:
                 formatted_phones.append(clean_phone)
-        intel.phoneNumbers = list(set(formatted_phones))
-        
+                # Extract 10-digit core (last 10 digits to handle +91 prefix)
+                phone_10digit = clean_phone[-10:] if len(clean_phone) >= 10 else clean_phone
+                phone_numbers_10digit.append(phone_10digit)
+        phone_set = set(formatted_phones)
+        phone_set_10digit = set(phone_numbers_10digit)
+        intel.phoneNumbers = list(phone_set)
+
         # Extract bank account numbers (be careful with false positives)
         account_matches = self.bank_account_pattern.findall(message)
         # Filter out likely false positives (too short or common numbers)
         valid_accounts = [acc for acc in account_matches if len(acc.replace('-', '').replace(' ', '')) >= 9]
+        # Remove any account numbers that match or are substrings of phone numbers
+        valid_accounts = [
+            acc for acc in valid_accounts 
+            if acc.replace('-', '').replace(' ', '') not in phone_set_10digit
+        ]
         intel.bankAccounts = list(set(valid_accounts))
         
         # Extract URLs
