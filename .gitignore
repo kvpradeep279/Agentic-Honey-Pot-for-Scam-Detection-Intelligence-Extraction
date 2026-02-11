@@ -21,12 +21,9 @@ doc.txt
 *.png
 
 # Test files (local testing only)
-test_honeypot_cases.py
-test_local.py
-test_multiturn.py
-test_18_messages.py
+test_*.py
+pytest.ini
 final_verification_test.py
-ultimate_final_test.py
 
 # Python cache
 __pycache__/
