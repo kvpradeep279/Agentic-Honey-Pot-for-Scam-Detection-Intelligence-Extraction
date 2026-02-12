@@ -615,7 +615,24 @@ class ScamDetector:
         for chunk in spaced_text_chunks:
             normalized = re.sub(r'[\s\-\.]', '', chunk)
             if 11 <= len(normalized) <= 18:
-                account_digit_exclusions.append(normalized)
+                # Check if this chunk is actually part of a +91 phone prefix
+                # e.g., "1-9876543210" from "+91-9876543210" should NOT be treated as account
+                chunk_start = message.find(chunk)
+                is_phone_prefix = False
+                if chunk_start > 0:
+                    # Look back for +91 or +9 pattern before this chunk
+                    prefix = message[max(0, chunk_start-4):chunk_start]
+                    if '+9' in prefix or '+91' in prefix:
+                        is_phone_prefix = True
+                # Also check: if normalized starts with '1' or '91' and rest is a 10-digit phone
+                if not is_phone_prefix:
+                    if normalized[:2] == '91' and len(normalized[2:]) == 10 and normalized[2] in '6789':
+                        is_phone_prefix = True
+                    elif normalized[0] == '1' and len(normalized[1:]) == 10 and normalized[1] in '6789':
+                        is_phone_prefix = True
+                
+                if not is_phone_prefix:
+                    account_digit_exclusions.append(normalized)
 
         # Extract phone numbers (normal format)
         phone_matches = self.phone_pattern.findall(message)
@@ -660,6 +677,14 @@ class ScamDetector:
         phone_set_10digit = set(phone_numbers_10digit)
         intel.phoneNumbers = list(phone_set)
 
+        # Build a comprehensive phone exclusion set for filtering bank accounts
+        # This includes all variations: 10-digit, +91 prefix, 91 prefix, etc.
+        phone_exclusion_set = set(phone_numbers_10digit)
+        for p10 in phone_numbers_10digit:
+            phone_exclusion_set.add('91' + p10)     # 919876543210
+            phone_exclusion_set.add('1' + p10)      # 19876543210 (partial +91 match)
+            phone_exclusion_set.add('+91' + p10)    # +919876543210
+
         # Extract bank account numbers (be careful with false positives)
         # Filter out likely false positives (too short or common numbers)
         valid_accounts = [acc for acc in account_matches if len(acc.replace('-', '').replace(' ', '')) >= 9]
@@ -678,12 +703,27 @@ class ScamDetector:
             if re.search(r'\d', match):
                 valid_accounts.append(match)
         
-        # Remove any account numbers that match or are substrings of phone numbers
-        valid_accounts = [
-            acc for acc in valid_accounts 
-            if acc.replace('-', '').replace(' ', '') not in phone_set_10digit
-        ]
-        intel.bankAccounts = list(set(valid_accounts))
+        # Remove any account numbers that are actually phone numbers
+        filtered_accounts = []
+        for acc in valid_accounts:
+            clean_acc = acc.replace('-', '').replace(' ', '')
+            # Skip if this is exactly a phone number or a phone number variant
+            if clean_acc in phone_exclusion_set:
+                continue
+            # Skip 10-digit numbers starting with 6-9 (Indian mobile numbers, not accounts)
+            if len(clean_acc) == 10 and clean_acc[0] in '6789':
+                continue
+            # Skip 12-digit numbers that are just 91 + phone (e.g., 919876543210)
+            if len(clean_acc) == 12 and clean_acc[:2] == '91' and clean_acc[2] in '6789':
+                if clean_acc[2:] in phone_set_10digit:
+                    continue
+            # Skip 11-digit numbers that are partial phone matches (e.g., 19876543210)
+            if len(clean_acc) == 11 and clean_acc[1] in '6789':
+                if clean_acc[1:] in phone_set_10digit:
+                    continue
+            filtered_accounts.append(acc)
+        
+        intel.bankAccounts = list(set(filtered_accounts))
         
         # Extract URLs (enhanced)
         url_matches = self.url_pattern.findall(message)

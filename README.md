@@ -326,11 +326,11 @@ flowchart LR
     end
     
     subgraph Processing
+        L[🛡️ Legitimate Guard]
         N[🔄 Normalize Text]
         K[📝 Keyword Scoring]
         P[🔍 Pattern Matching]
         C[📊 Context Analysis]
-        L[🌐 Legitimate Check]
     end
     
     subgraph Output
@@ -338,37 +338,43 @@ flowchart LR
         D[✅ Decision]
     end
     
-    M --> N
+    M --> L
+    L -->|Not Legitimate| N
+    L -->|Legitimate| D
     N --> K
     N --> P
     N --> C
     K --> S
     P --> S
     C --> S
-    S --> L
-    L --> D
+    S --> D
 ```
 
-### Detection Checks (16 Total)
+> ⚠️ **Important**: The Legitimate Guard (Check 0) runs **first** — before any scam scoring. If the message matches a legitimate pattern (bank OTP, transaction alert, booking confirmation), it is immediately cleared with a score of 0.0 and all 16 scam checks are bypassed. This is why we achieve **0% false positives**.
+
+### Detection Checks (19 Total)
 
 | # | Check | Score Impact | Description |
 |---|-------|--------------|-------------|
+| 0 | **Legitimate Message Guard** | → 0.0 (bypass) | Real OTPs, transaction alerts, delivery/booking notifications — immediately cleared |
+| 0b | **Credit Card Bill Guard** | → 0.0 (bypass) | Legitimate credit card bill reminders with "min due" — immediately cleared |
 | 1 | **Urgency Keywords** | +0.15 | "urgent", "immediately", "jaldi", "abhi" |
 | 2 | **Threat Keywords** | +0.20 | "blocked", "suspended", "legal action" |
 | 3 | **Sensitive Data Requests** | +0.25 | "OTP", "PIN", "CVV", "Aadhaar" |
-| 4 | **Financial Keywords** | +0.15 | "lottery", "prize", "refund", "KYC" |
-| 5 | **Job Scam Keywords** | +0.20 | "selected", "work from home", "registration fee" |
-| 6 | **Impersonation** | +0.20 | "RBI", "SBI", "customer care", "government" |
-| 7 | **Hinglish Patterns** | +0.10 | Mixed Hindi-English scam phrases |
-| 8 | **Phone Numbers** | +0.10* | Extracted from message |
+| 4 | **Financial Keywords** | +0.25 | "lottery", "prize", "refund", "KYC" |
+| 4b | **Job Scam Keywords** | +0.15–0.40 | "selected", "work from home" + payment request |
+| 5 | **Impersonation** | +0.15 | "RBI", "SBI", "customer care", "government" |
+| 6 | **Suspicious Links** | +0.15 | HTTP/HTTPS links (legitimate domains filtered out) |
+| 7 | **UPI IDs** | +0.15* | Pattern: `name@provider` with payment context |
+| 8 | **Phone Numbers** | +0.10* | Indian mobile numbers with suspicious context |
 | 9 | **Bank Accounts** | +0.15 | 9-18 digit account numbers |
-| 10 | **UPI IDs** | +0.15* | Pattern: `name@provider` |
-| 11 | **URLs/Links** | +0.10 | HTTP/HTTPS links detected |
-| 12 | **Channel Shift** | +0.15 | "WhatsApp", "Telegram", "call me" |
-| 13 | **Payment Request** | +0.20* | "transfer", "pay", "send money" |
-| 14 | **Charity Scams** | +0.15 | "donation", "temple", "orphanage" |
-| 15 | **Insurance Scams** | +0.15 | "policy", "premium", "claim" |
-| 16 | **Government Authority** | +0.15 | "CBI", "ED", "Income Tax", "raid" |
+| 10 | **Hinglish Patterns** | +0.15 | Mixed Hindi-English scam phrases |
+| 11 | **Channel Shift** | +0.15 | "WhatsApp", "Telegram", "call me" |
+| 12 | **Remote Access** | +0.35 | "AnyDesk", "TeamViewer", "screen share" |
+| 13 | **Government Authority** | +0.25 | "CBI", "ED", "Income Tax", "arrest warrant" |
+| 14 | **Charity/Donation Scams** | +0.20 | "donation", "temple", "orphanage" + UPI |
+| 15 | **Insurance/Policy Scams** | +0.20 | "policy", "premium", "claim" + urgency |
+| 16 | **Context from History** | +0.10 | Multi-turn escalation detection |
 
 *Score varies based on context combination
 
@@ -424,17 +430,23 @@ SMS_ABBREVIATIONS = {
 }
 ```
 
-### False Positive Prevention
+### False Positive Prevention (Check 0 — Legitimate Guard)
 
-To avoid flagging legitimate messages, we check for:
+The **very first step** in our detection is a whitelist layer with **15+ regex patterns** that recognizes legitimate messages. If matched, the message is immediately cleared with score `0.0` — **all 16 scam checks are bypassed entirely**.
 
-| Legitimate Pattern | Example |
-|--------------------|---------|
-| Real OTP notifications | "Your OTP for SBI transaction is 123456. Do not share." |
-| Appointment reminders | "Reminder: Your appointment with Dr. Sharma tomorrow at 10 AM" |
-| Delivery updates | "Your Amazon order #XYZ has been shipped" |
-| Movie/ticket bookings | "BookMyShow: Tickets confirmed for Avatar 2" |
-| Genuine refund notifications | "Refund of ₹500 processed to your account" |
+| Legitimate Pattern | Example | Regex Logic |
+|--------------------|---------|-------------|
+| Real OTP notifications | "Your OTP for SBI transaction is 123456. Do not share." | Matches `OTP.*do not share` format |
+| Transaction alerts | "INR 5000.00 debited from A/c XX1234. Avl Bal: INR 45000" | Matches `debited.*Avl Bal` format |
+| Payment confirmations | "Rs.500 paid to Swiggy via UPI. Ref: 123456789012" | Matches `paid to.*via UPI` format |
+| Delivery updates | "Your Amazon order #XYZ has been shipped" | Matches `order.*shipped/delivered` |
+| Booking confirmations | "Your flight 6E-123 is confirmed. PNR: ABC123" | Matches `booking/flight.*confirmed` |
+| Appointment reminders | "Your appointment with Dr. Sharma at 10 AM" | Matches `appointment.*confirmed` |
+| Movie/ticket bookings | "BookMyShow: Tickets confirmed for Avatar 2" | Matches `ticket.*confirmed/booked` |
+| Credit card bills | "HDFC Card bill Rs.15000 due on 20-Feb. Min Due: Rs.1500" | Matches `card bill.*min.*due` |
+| Genuine refund notifications | "Refund of ₹500 processed to your account" | Matches `refund.*processed/initiated` |
+
+> 💡 **Why this matters**: Without this guard, legitimate OTPs containing "OTP" (+0.25) and bank names like "SBI" (+0.15) would incorrectly score 0.40 and be flagged as scams. Our Check 0 prevents this entirely.
 
 ---
 
@@ -506,6 +518,31 @@ r'[a-zA-Z0-9][-a-zA-Z0-9]*\.(?:com|in|co\.in|org|net)'
 # - http://fake-sbi.com/kyc
 # - sbi-verify.secure-bank.co.in
 ```
+
+### Obfuscated Data Extraction
+
+Scammers often disguise their contact information to bypass filters. Our extraction engine handles these obfuscated formats:
+
+| Obfuscation Type | Raw Input | Extracted Output | Method |
+|-----------------|-----------|-----------------|--------|
+| **Spaced UPI** | `name @ bank` | `name@bank` | Regex + whitespace normalization |
+| **Spaced Phone** | `98 765 432 10` | `9876543210` | Digit aggregation with validation |
+| **Spaced Digits** | `1 2 3 4 5 6 7 8 9 0 1 2` | `123456789012` | Spaced chunk detection |
+| **Masked Accounts** | `XXXX1234` | `XXXX1234` (preserved) | Masked account pattern |
+| **Dashed Phone** | `98-765-432-10` | `9876543210` | Separator stripping |
+
+### Smart Phone vs. Account Disambiguation
+
+A critical challenge: long digit sequences could be either phone numbers or bank accounts. Our system disambiguates using:
+
+| Rule | Logic |
+|------|-------|
+| **Length check** | 10 digits starting with 6-9 → Phone; 11-18 digits → Bank account |
+| **Substring exclusion** | If a phone number is a substring of a bank account, skip it |
+| **First digit rule** | Digits starting with 6-9 are Indian mobile numbers; others are account numbers |
+| **Duplicate prevention** | Same number is never listed in both `phoneNumbers` and `bankAccounts` |
+
+> 💡 This prevents a bank account `9876543210123456` from also being extracted as phone `9876543210`.
 
 ---
 
@@ -596,6 +633,39 @@ When Gemini API fails, the agent uses **50+ pre-built responses** across 10 cate
 | **Hinglish** | "Acha ji? Kya karna padega?" |
 | **Extracted** | Questions that prompt revealing more info |
 
+### Exposure Risk Filter (Cover Protection)
+
+A critical safety mechanism: every AI-generated response is scanned before being sent to the scammer.
+
+```mermaid
+flowchart LR
+    A[🤖 Gemini Response] --> B{Contains risky words?}
+    B -->|No| C[✅ Send to Scammer]
+    B -->|Yes| D[❌ Discard & Use Fallback]
+    
+    style C fill:#4ecdc4,color:#fff
+    style D fill:#ff6b6b,color:#fff
+```
+
+**Risky words checked**: `scam`, `fraud`, `fake`, `suspicious`, `report`, `police`, `cyber crime`, `phishing`, `malicious`, `don't trust`, `not legitimate`
+
+> 🚨 **Why this matters**: Without this filter, a single Gemini slip-up saying "this seems suspicious" would blow the bot's cover instantly. The scammer would stop engaging and move to the next victim.
+
+### Scammer Tactics Analyzer (Behavioral Intelligence)
+
+Beyond extracting data, our system classifies the scammer's **psychological tactics** for each message:
+
+| Detected Tactic | Trigger Keywords | Intelligence Value |
+|----------------|-----------------|--------------------|
+| "Creating urgency to bypass rational thinking" | `urgent`, `immediately`, `hurry` | Identifies manipulation strategy |
+| "Using threats and fear tactics" | `blocked`, `suspended`, `legal` | Documents intimidation methods |
+| "Impersonating authority/institution" | `bank`, `rbi`, `government` | Tracks impersonation patterns |
+| "Attempting to steal credentials" | `otp`, `pin`, `password`, `cvv` | Records data theft attempts |
+| "Using financial bait/rewards" | `prize`, `lottery`, `winner` | Identifies lure strategies |
+| "Attempting to redirect to phishing site" | `link`, `click`, `download` | Flags phishing infrastructure |
+
+These tactics are written into `agentNotes` in the callback payload, giving law enforcement a **behavioral profile** of the scammer — not just raw data.
+
 ---
 
 ## 9. API Documentation
@@ -608,6 +678,7 @@ The API is designed to be **simple to integrate** while providing comprehensive 
 - **Stateless design** allows horizontal scaling
 - **JSON in/out** with clear request/response schemas
 - **API key authentication** for security
+- **Flexible message format** — accepts `text` or `content` field, string or dict messages, int/float/string timestamps
 
 ### Endpoints
 
@@ -706,6 +777,14 @@ The callback mechanism allows our honeypot to **report extracted intelligence** 
 - **Non-blocking** - Callbacks are sent asynchronously, so API response is not delayed
 - **Intelligent timing** - Waits for sufficient engagement before sending (maximizes intelligence)
 - **Duplicate prevention** - Each session sends only ONE callback to avoid duplicate reports
+
+### Conversation History Re-Extraction
+
+On every API request, the system **re-extracts intelligence** from all previous scammer messages in the `conversationHistory`. This ensures:
+
+- ✅ **Restart resilience** — If the server restarts mid-conversation, intelligence is recovered from the history the evaluator sends
+- ✅ **Cumulative extraction** — Intelligence from earlier messages is not lost even if sessions are cleared
+- ✅ **Message count recovery** — `message_count` is recalculated from `conversationHistory` length, not stored state
 
 ### When Callback is Triggered
 
@@ -867,7 +946,8 @@ Our test suite validates the detection engine against **191 real-world test case
 | Limitation | Description | Mitigation |
 |------------|-------------|------------|
 | **Gemini API Quota** | Rate limits on free tier | 4-model fallback chain |
-| **Session Memory** | In-memory storage (no persistence) | Sessions lost on restart |
+| **Session Memory** | In-memory storage (no persistence) | Re-extraction from `conversationHistory` on each request recovers most data |
+| **Server Restart** | Accumulated intelligence lost on restart | `message_count` recalculated from history; intel re-extracted from historical messages |
 | **Single Instance** | No horizontal scaling | Render handles auto-scaling |
 | **Regional Languages** | Limited to common phrases | Primarily English/Hinglish |
 

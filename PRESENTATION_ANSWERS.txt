@@ -380,6 +380,76 @@ Result: 3 scam keywords detected → Score increased
 
 This handles 93% of obfuscation attempts (15/15 tests pass).
 
+
+ALTERNATIVE NUANCE: INTELLIGENCE-DRIVEN CALLBACK TIMING
+
+The Problem Others Miss:
+Most honeypots report a scam the moment it creates a log or is detected. This is often premature—you get the "alert" but not the "evidence" (bank accounts, UPI IDs) needed for takedowns.
+
+What We Did Differently:
+We implemented a DYNAMIC CALLBACK THRESHOLD in `app/callback_handler.py`. Instead of a fixed timer, our system waits to report based on the *quality* of intelligence gathered:
+
+Logic (Actual Code Implementation):
+• Rich Intelligence (3+ items): Reports early (after ~10 turns) because we have enough evidence.
+• Weak Intelligence (Keywords only): Forces the agent to keep engaging (up to 25+ turns) to dig for hard evidence.
+• Force Callback: At 35 turns, it reports whatever it has to prevent infinite loops.
+
+Why This Matters:
+This ensures law enforcement gets complete, actionable dossiers (Account + UPI + Phone) rather than just "Scam Detected" alerts. We trade *speed of reporting* for *completeness of evidence*.
+
+
+ALTERNATIVE NUANCE: LEGITIMATE MESSAGE GUARD (FALSE POSITIVE PREVENTION)
+
+The Problem Others Miss:
+Most scam detectors score every message through their keyword engine. This means legitimate bank OTPs like "123456 is your OTP for SBI Net Banking. Do not share" would score points for "OTP" (+0.25) and "SBI" (+0.15) = 0.40, incorrectly flagged as a scam.
+
+What We Did Differently:
+We implemented a "Check 0" in `app/scam_detector.py` (Lines 315-325) — a dedicated whitelist layer that runs BEFORE any scam scoring even begins.
+
+Logic (Actual Code Implementation):
+• 15+ regex patterns match legitimate messages: bank OTP formats, transaction alerts ("INR X debited from A/c"), delivery notifications, booking confirmations.
+• If ANY pattern matches → immediately returns `False, 0.0` — ALL 16 scam checks are bypassed entirely.
+• Result: 20/20 legitimate messages correctly identified (100% false positive prevention).
+
+Why This Matters:
+Other systems would flag "Your OTP is 123456 - SBI" as a scam because it contains "OTP" and "SBI" — two high-weight scam keywords. Our system recognizes the STRUCTURE of a real OTP message and skips analysis entirely. This is why we achieve 0% false positives.
+
+
+ALTERNATIVE NUANCE: EXPOSURE RISK FILTER (COVER PROTECTION)
+
+The Problem Others Miss:
+When using AI (like Gemini) to generate honeypot responses, the AI might accidentally say "this looks like a scam" or "I should report this to police" — blowing the bot's cover instantly.
+
+What We Did Differently:
+We implemented `_contains_exposure_risk()` in `app/agent.py` (Lines 447-464) that scans EVERY AI-generated response before sending it.
+
+Logic (Actual Code Implementation):
+• Checks for risky words: "scam", "fraud", "fake", "suspicious", "report", "police", "cyber crime", "phishing", "malicious"
+• If ANY risky word is found → the AI response is DISCARDED and replaced with a safe pre-written fallback response.
+• The scammer never sees the AI's slip-up.
+
+Why This Matters:
+This is a critical safety net. Without it, a single Gemini response saying "this seems suspicious" would end the conversation — the scammer would stop and move to the next victim. Our system ensures the bot NEVER breaks character.
+
+
+ALTERNATIVE NUANCE: SCAMMER TACTICS ANALYZER (BEHAVIORAL INTELLIGENCE)
+
+The Problem Others Miss:
+Most systems extract DATA (phone numbers, links) but don't analyze the scammer's BEHAVIOR. Law enforcement needs to know not just what the scammer asked for, but HOW they manipulated the victim.
+
+What We Did Differently:
+We implemented `analyze_scammer_tactics()` in `app/agent.py` (Lines 466-494). After each message, it categorizes the scammer's psychological tactics:
+
+Tactics Detected (Actual Code):
+• "Creating urgency to bypass rational thinking" (if words like "urgent", "immediately")
+• "Using threats and fear tactics" (if words like "blocked", "suspended", "legal")
+• "Impersonating authority/institution" (if words like "bank", "rbi", "government")
+• "Attempting to steal credentials" (if words like "otp", "pin", "password")
+• "Using financial bait/rewards" (if words like "prize", "lottery", "winner")
+• "Attempting to redirect to phishing site" (if words like "link", "click")
+
+These tactics are written into `agentNotes` in the final callback payload — giving law enforcement a behavioral profile of the scammer, not just raw data.
+
 ================================================================================
 6) A TRADE-OFF YOU MADE (AND WHY)
 ================================================================================
@@ -627,6 +697,43 @@ Our 8 failures (out of 191) are:
 
 These represent edge cases rather than core system failures.
 The 95.8% pass rate reflects real-world performance pretty well.
+
+
+ALTERNATIVE FAILURE CASE: THE "SILENT" CHANNEL SHIFT
+
+What Fails:
+A scammer sends *only* a direct WhatsApp link (e.g., `wa.me/919876543210`) with no other text or context (no "urgent", "lottery", or "blocked" keywords).
+
+Why It Fails:
+• Our pattern matcher (`app/scam_detector.py`) assigns scores for *intent* (Urgency +0.15, Threat +0.20).
+• A raw link without context might score only **0.15** (just for the link presence).
+• This is below our scam threshold of **0.30**.
+
+The Trade-off:
+We consciously allow this because legitimate businesses also send "Chat with us on WhatsApp" links. Blocking every `wa.me` link would create too many false positives for genuine customer support interactions. We require *at least one other indicator* (like "prize" or "verify") to flag it as a scam.
+
+
+ALTERNATIVE FAILURE CASE: SERVER RESTART INTELLIGENCE LOSS
+
+What Fails:
+If the server restarts mid-conversation (e.g., Render.com redeploys), all accumulated intelligence from previous turns is LOST because sessions are stored in-memory.
+
+Example Scenario:
+• Turn 1-10: System extracts bank account "1234567890" and UPI "scammer@ybl" across messages.
+• Turn 11: Server restarts (auto-deploy or crash).
+• Turn 12: Scammer sends next message — new session is created with ZERO intelligence.
+• Callback fires with empty intelligence even though we had rich data before.
+
+Our Mitigation (Actual Code - `app/main.py` Lines 217-222):
+• We recalculate `message_count` from `conversationHistory` that the evaluator sends us.
+• So the system knows it's at Turn 12, not Turn 1 — preventing premature callbacks.
+• BUT: The extracted intelligence (bank accounts, UPIs) from Turns 1-10 is still lost.
+• We partially recover by re-extracting from `conversationHistory` messages (Lines 259-263).
+
+Why We Accept This:
+• For a hackathon, in-memory sessions are simpler and faster than setting up Redis/PostgreSQL.
+• The `conversationHistory` re-extraction recovers most intelligence.
+• Future fix: Redis-based session storage for persistence across restarts.
 
 ================================================================================
 SCORING OVERVIEW
