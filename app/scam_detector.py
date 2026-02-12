@@ -602,6 +602,21 @@ class ScamDetector:
         )}
         intel.upiIds = list(upi_set)
         
+        # Precompute spaced digit chunks once (used for phone + account extraction)
+        spaced_text_chunks = re.findall(r'(\d[\s\-\.]+(?:\d[\s\-\.]*){8,}\d)', message)
+
+        # Identify long numeric sequences to prevent phone substring extraction
+        account_matches = self.bank_account_pattern.findall(message)
+        account_digit_exclusions = []
+        for acc in account_matches:
+            normalized = re.sub(r'[-\s]', '', acc)
+            if len(normalized) >= 11:
+                account_digit_exclusions.append(normalized)
+        for chunk in spaced_text_chunks:
+            normalized = re.sub(r'[\s\-\.]', '', chunk)
+            if 11 <= len(normalized) <= 18:
+                account_digit_exclusions.append(normalized)
+
         # Extract phone numbers (normal format)
         phone_matches = self.phone_pattern.findall(message)
         # Format phone numbers consistently and extract 10-digit core
@@ -610,9 +625,12 @@ class ScamDetector:
         for phone in phone_matches:
             clean_phone = re.sub(r'[-\s]', '', phone)
             if len(clean_phone) >= 10:
-                formatted_phones.append(clean_phone)
                 # Extract 10-digit core (last 10 digits to handle +91 prefix)
-                phone_10digit = clean_phone[-10:] if len(clean_phone) >= 10 else clean_phone
+                phone_10digit = clean_phone[-10:]
+                # Skip if the phone number is part of a longer bank account number
+                if any(phone_10digit in acc for acc in account_digit_exclusions):
+                    continue
+                formatted_phones.append(clean_phone)
                 phone_numbers_10digit.append(phone_10digit)
         
         # Also extract spaced phone numbers: "98 765 432 10" or "9-8-7-6-5-4-3-2-1-0"
@@ -629,13 +647,12 @@ class ScamDetector:
         
         # Also extract spaced digits that look like phone numbers
         # Find all matches of spaced digits in the message
-        spaced_text_chunks = re.findall(r'(\d[\s\-\.]+(?:\d[\s\-\.]*){8,}\d)', message)
         for chunk in spaced_text_chunks:
             # Normalize: remove spaces, dashes, dots
             normalized = re.sub(r'[\s\-\.]', '', chunk)
             if len(normalized) == 10 and normalized[0] in '6789':
                 # Looks like an Indian phone number
-                if normalized not in phone_numbers_10digit:
+                if normalized not in phone_numbers_10digit and not any(normalized in acc for acc in account_digit_exclusions):
                     formatted_phones.append(normalized)
                     phone_numbers_10digit.append(normalized)
         
@@ -644,7 +661,6 @@ class ScamDetector:
         intel.phoneNumbers = list(phone_set)
 
         # Extract bank account numbers (be careful with false positives)
-        account_matches = self.bank_account_pattern.findall(message)
         # Filter out likely false positives (too short or common numbers)
         valid_accounts = [acc for acc in account_matches if len(acc.replace('-', '').replace(' ', '')) >= 9]
         
