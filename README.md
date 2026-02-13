@@ -243,17 +243,19 @@ sequenceDiagram
 ├── 📂 app/                          # Core application code
 │   ├── 📄 __init__.py               # Package initializer
 │   ├── 📄 main.py                   # FastAPI application entry point
-│   ├── 📄 scam_detector.py          # Scam detection engine
-│   ├── 📄 agent.py                  # AI agent for engagement
+│   ├── 📄 scam_detector.py          # Scam detection engine (700+ lines)
+│   ├── 📄 agent.py                  # AI agent for engagement (multi-provider)
 │   ├── 📄 session_manager.py        # Multi-turn session handling
 │   ├── 📄 callback_handler.py       # GUVI callback integration
 │   ├── 📄 models.py                 # Pydantic data models
-│   └── 📄 config.py                 # Configuration management
+│   └── 📄 config.py                 # Configuration & API key management
 │
-├── 📂 Documents/                    # Problem statement docs
-│   ├── 📄 1_ProblemStatement.txt
-│   ├── 📄 2_Info.txt
-│   └── 📄 doc.txt
+├── 📂 testing/                      # Test suite & demo scripts
+│   ├── 📄 test_final_comprehensive.py  # 191-case comprehensive test suite
+│   ├── 📄 demo_api_test.py             # API endpoint testing demo
+│   └── 📄 demo_conversation.py         # Multi-turn conversation demo
+│
+├── 📂 Documents/                    # Problem statement docs (gitignored)
 │
 ├── 📄 requirements.txt              # Python dependencies
 ├── 📄 Procfile                      # Deployment configuration
@@ -306,6 +308,44 @@ sequenceDiagram
 | Async sending | Non-blocking callback dispatch |
 | Error handling | Retries and logging |
 
+#### **app/models.py** — Data Models
+| Responsibility | Description |
+|----------------|-------------|
+| Request validation | Pydantic models for `Message`, `Metadata`, `HoneypotRequest` |
+| Response schemas | `HoneypotResponse`, `ExtractedIntelligence` |
+| Type safety | Automatic validation, JSON schema generation |
+| Flexible parsing | Handles string/dict messages, int/float/string timestamps |
+
+#### **app/config.py** — Configuration Management
+| Responsibility | Description |
+|----------------|-------------|
+| Environment loading | Reads all keys from `.env` via `python-dotenv` |
+| Multi-key support | Loads `GEMINI_API_KEY`, `GEMINI_API_KEY_2`, ..., `GEMINI_API_KEY_10` |
+| Provider config | Manages Gemini, Grok, and OpenAI API keys |
+| Operational params | Callback URL, thresholds, and system settings |
+
+#### **testing/test_final_comprehensive.py** — Comprehensive Test Suite
+| Responsibility | Description |
+|----------------|-------------|
+| 191 test cases | Covers all 18 scam categories + false positives + edge cases |
+| Extraction validation | Verifies UPI, phone, bank account, and link extraction |
+| Confidence checks | Ensures minimum confidence thresholds are met |
+| Summary reporting | Prints pass/fail counts and failure details |
+
+#### **testing/demo_api_test.py** — API Testing Demo
+| Responsibility | Description |
+|----------------|-------------|
+| Live API testing | Sends scam messages to the running API endpoint |
+| Response validation | Checks status codes, reply format, and content |
+| Multi-turn testing | Simulates multi-message conversations |
+
+#### **testing/demo_conversation.py** — Conversation Demo
+| Responsibility | Description |
+|----------------|-------------|
+| 15-message simulation | Runs a realistic scam conversation through all components |
+| Intelligence report | Shows cumulative extracted intelligence after engagement |
+| Engagement summary | Displays conversation statistics and scam confidence |
+
 ---
 
 ## 6. Scam Detection Engine
@@ -352,7 +392,7 @@ flowchart LR
     S --> D
 ```
 
-> ⚠️ **Important**: The Legitimate Guard (Check 0) runs **first** — before any scam scoring. If the message matches a legitimate pattern (bank OTP, transaction alert, booking confirmation), it is immediately cleared with a score of 0.0 and all 16 scam checks are bypassed. This is why we achieve **0% false positives**.
+> ⚠️ **Important**: The Legitimate Guard (Check 0) runs **first** — before any scam scoring. If the message matches a legitimate pattern (bank OTP, transaction alert, booking confirmation), it is immediately cleared with a score of 0.0 and all remaining scam checks are bypassed. This is why we achieve **0% false positives**.
 
 ### Detection Checks (19 Total)
 
@@ -434,7 +474,7 @@ SMS_ABBREVIATIONS = {
 
 ### False Positive Prevention (Check 0 — Legitimate Guard)
 
-The **very first step** in our detection is a whitelist layer with **15+ regex patterns** that recognizes legitimate messages. If matched, the message is immediately cleared with score `0.0` — **all 16 scam checks are bypassed entirely**.
+The **very first step** in our detection is a whitelist layer with **15+ regex patterns** that recognizes legitimate messages. If matched, the message is immediately cleared with score `0.0` — **all 19 scam checks are bypassed entirely**.
 
 | Legitimate Pattern | Example | Regex Logic |
 |--------------------|---------|-------------|
@@ -638,16 +678,16 @@ Agent: "Acha? But kyun beta? Kaun sa account? Mera paisa safe hai na?"
 
 ### Fallback Response System
 
-When Gemini API fails, the agent uses **50+ pre-built responses** across 10 categories:
+When all AI providers fail (Gemini + Grok), the agent uses **50+ pre-built responses** across 10 categories:
 
 | Category | Example Responses |
 |----------|-------------------|
-| **Confusion** | "I don't understand, beta. Can you explain again?" |
+| **Confusion** | "I don't understand, can you explain again?" |
 | **Banking** | "Which bank is this from? SBI or HDFC?" |
 | **Verification** | "How do I know this is really from the bank?" |
-| **Technical** | "UPI? Is that something on my phone?" |
-| **Stalling** | "Wait, let me find my reading glasses..." |
-| **Family** | "Let me ask my grandson, he knows these things" |
+| **Technical** | "UPI? I use it for payments but this seems different..." |
+| **Stalling** | "Wait, I'm in a meeting right now, give me a moment..." |
+| **Family** | "Let me check with my wife first, she handles our accounts" |
 | **Compliance** | "Okay, what number should I send it to?" |
 | **Concern** | "My savings are very important to me..." |
 | **Hinglish** | "Acha ji? Kya karna padega?" |
@@ -659,7 +699,7 @@ A critical safety mechanism: every AI-generated response is scanned before being
 
 ```mermaid
 flowchart LR
-    A[🤖 Gemini Response] --> B{Contains risky words?}
+    A[🤖 AI Response] --> B{Contains risky words?}
     B -->|No| C[✅ Send to Scammer]
     B -->|Yes| D[❌ Discard & Use Fallback]
     
@@ -965,7 +1005,7 @@ Our test suite validates the detection engine against **191 real-world test case
 
 | Limitation | Description | Mitigation |
 |------------|-------------|------------|
-| **Gemini API Quota** | Rate limits on free tier | 4-model fallback chain |
+| **Gemini API Quota** | Rate limits on free tier | Multi-key rotation (2 keys × 4 models) + Grok fallback |
 | **Session Memory** | In-memory storage (no persistence) | Re-extraction from `conversationHistory` on each request recovers most data |
 | **Server Restart** | Accumulated intelligence lost on restart | `message_count` recalculated from history; intel re-extracted from historical messages |
 | **Single Instance** | No horizontal scaling | Render handles auto-scaling |

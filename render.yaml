@@ -14,4 +14,8 @@ services:
       - key: HONEYPOT_API_KEY
         sync: false  # You'll set this in Render dashboard
       - key: GEMINI_API_KEY
-        sync: false  # You'll set this in Render dashboard
+        sync: false  # Primary Gemini key
+      - key: GEMINI_API_KEY_2
+        sync: false  # Secondary key for rotation (optional)
+      - key: GrokAI_API_KEY
+        sync: false  # Grok/xAI fallback key (optional)
