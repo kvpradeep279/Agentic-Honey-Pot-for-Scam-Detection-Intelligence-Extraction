@@ -135,9 +135,9 @@ An **AI-powered honeypot API** that turns the tables on scammers by:
 
 When a scammer sends a message like "Your account will be blocked, share OTP immediately!", our system:
 
-1. **Analyzes** the message for 16+ scam indicators (urgency, threats, data requests)
+1. **Analyzes** the message for 19 scam indicators (urgency, threats, data requests)
 2. **Calculates** a confidence score (0.0 to 1.0) based on weighted pattern matches
-3. **If scam detected**, activates an AI agent that pretends to be a confused elderly person
+3. **If scam detected**, activates an AI agent that pretends to be a busy, trusting professional
 4. **Extracts** any bank accounts, UPI IDs, phone numbers, or phishing links
 5. **Engages** the scammer in conversation, wasting their time
 6. **Reports** all extracted intelligence to law enforcement/security teams
@@ -157,7 +157,8 @@ When a scammer sends a message like "Your account will be blocked, share OTP imm
 | Component | Technology | Purpose |
 |-----------|------------|---------|
 | **Web Framework** | FastAPI | High-performance async API |
-| **AI Engine** | Google Gemini | Natural language generation |
+| **AI Engine (Primary)** | Google Gemini (2 keys) | Natural language generation with key rotation |
+| **AI Engine (Fallback)** | Grok / xAI | Fallback AI when Gemini hits rate limits |
 | **Language** | Python 3.11+ | Core implementation |
 | **Deployment** | Render.com | Cloud hosting |
 
@@ -283,8 +284,9 @@ sequenceDiagram
 #### **app/agent.py** — AI Engagement
 | Responsibility | Description |
 |----------------|-------------|
-| Gemini integration | 4 model fallback chain |
-| Persona maintenance | Elderly Indian victim character |
+| Multi-provider AI | Gemini (2 keys × 4 models) + Grok fallback |
+| Key rotation | Round-robin across API keys to avoid rate limits |
+| Persona maintenance | Middle-aged Indian professional character |
 | Language mirroring | Hinglish/regional language support |
 | Fallback responses | 50+ pre-built responses for API failures |
 
@@ -550,45 +552,63 @@ A critical challenge: long digit sequences could be either phone numbers or bank
 
 ### Agent Persona
 
-The AI agent plays the role of an **elderly Indian person (65+ years)** who is:
+The AI agent plays the role of a **middle-aged Indian person (35-55 years)** who is:
 
 | Trait | Behavior |
 |-------|----------|
-| **Not tech-savvy** | Confused by banking terms, asks for clarification |
-| **Trusting** | Respects "officials", willing to cooperate |
-| **Worried** | Concerned about savings, shows anxiety |
-| **Slow** | Takes time to understand, extends conversation |
-| **Cooperative** | Gradually provides information (fake) |
+| **Moderate tech knowledge** | Not an expert but uses banking apps, still asks for clarification on complex terms |
+| **Busy professional** | Working person with family responsibilities, makes hasty decisions under pressure |
+| **Trusting of officials** | Respects authority figures like banks, government agencies |
+| **Worried about security** | Concerned about account safety and savings |
+| **Cooperative** | Willing to help if it seems legitimate, asks questions before acting |
 
-### Response Generation Flow
+### Response Generation Flow (Multi-Key + Multi-Provider)
+
+The system uses a **3-tier AI resilience chain**: round-robin Gemini key rotation → Grok fallback → static responses.
 
 ```mermaid
 flowchart TD
-    A[Scammer Message] --> B{Gemini Available?}
-    B -->|Yes| C[Try Model 1: gemini-2.0-flash]
-    B -->|No| G[Fallback Response]
-    C -->|Success| H[Return Response]
-    C -->|Fail| D[Try Model 2: gemini-1.5-flash]
-    D -->|Success| H
-    D -->|Fail| E[Try Model 3: gemini-1.5-pro]
-    E -->|Success| H
-    E -->|Fail| F[Try Model 4: gemini-pro]
-    F -->|Success| H
-    F -->|Fail| G
-    G --> H
+    A[📨 Scammer Message] --> B{AI Available?}
+    B -->|No| STATIC[📝 Static Fallback Response]
+    B -->|Yes| RR[🔑 Rotate to Next Gemini Key<br/>Round-Robin]
+    
+    RR --> M1[Try gemini-flash-lite-latest]
+    M1 -->|✅ Success| H[✅ Return Response]
+    M1 -->|❌ Fail| M1R{Rate Limited?}
+    M1R -->|Yes & keys left| SWAP1[🔑 Switch Key & Retry]
+    SWAP1 -->|✅| H
+    SWAP1 -->|❌| M2
+    M1R -->|No / keys exhausted| M2[Try gemini-2.5-flash-lite]
+    
+    M2 -->|✅| H
+    M2 -->|❌| M3[Try gemini-2.0-flash-lite]
+    M3 -->|✅| H
+    M3 -->|❌| M4[Try gemini-2.5-flash]
+    M4 -->|✅| H
+    M4 -->|❌| GROK
+    
+    GROK[🔄 Try Grok / xAI<br/>grok-3-mini-fast] -->|✅| H
+    GROK -->|❌| STATIC
+    STATIC --> H
     
     style H fill:#4ecdc4,color:#fff
-    style G fill:#ffa94d,color:#000
+    style GROK fill:#8b5cf6,color:#fff
+    style STATIC fill:#ffa94d,color:#000
+    style RR fill:#3b82f6,color:#fff
 ```
 
-### Gemini Model Chain
+### AI Provider Chain
 
-| Priority | Model | Use Case |
-|----------|-------|----------|
-| 1 | `gemini-2.0-flash` | Latest, fastest |
-| 2 | `gemini-1.5-flash` | High performance |
-| 3 | `gemini-1.5-pro` | Better quality |
-| 4 | `gemini-pro` | Legacy fallback |
+| Priority | Provider | Model | Purpose |
+|----------|----------|-------|---------|
+| 1 | Gemini (Key 1→2) | `gemini-flash-lite-latest` | Highest free tier quota, fastest |
+| 2 | Gemini (Key 1→2) | `gemini-2.5-flash-lite` | Lite version of 2.5 |
+| 3 | Gemini (Key 1→2) | `gemini-2.0-flash-lite` | Lite version of 2.0 |
+| 4 | Gemini (Key 1→2) | `gemini-2.5-flash` | Full version (lower quota) |
+| 5 | **Grok / xAI** | `grok-3-mini-fast` | **Fallback when all Gemini exhausted** |
+| 6 | Static | Pre-built responses | Final safety net (50+ responses) |
+
+> 🔑 **Key Rotation Strategy**: Each request rotates to the next Gemini API key (round-robin). On rate limit (429), the system also swaps to the other key before moving to the next model. This effectively gives **8 Gemini attempts** (4 models × 2 keys) before falling back to Grok.
 
 ### Language Mirroring
 
@@ -1007,14 +1027,25 @@ cp .env.example .env
 
 # Edit .env with your values
 HONEYPOT_API_KEY=your-secret-api-key
-GEMINI_API_KEY=your-gemini-api-key
+GEMINI_API_KEY=your-first-gemini-key
+GEMINI_API_KEY_2=your-second-gemini-key     # Optional: enables key rotation
+GrokAI_API_KEY=your-grok-xai-key            # Optional: fallback AI provider
 ```
 
-#### 5. Get Gemini API Key (Free)
+#### 5. Get API Keys
+
+**Gemini (Primary — Free tier):**
 1. Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
 2. Sign in with Google account
-3. Click "Create API Key"
-4. Copy key to `.env` file
+3. Click "Create API Key" (create 2 keys for rotation)
+4. Copy keys to `.env` as `GEMINI_API_KEY` and `GEMINI_API_KEY_2`
+
+**Grok / xAI (Fallback — Optional):**
+1. Visit [xAI Console](https://console.x.ai/)
+2. Create an API key
+3. Copy to `.env` as `GrokAI_API_KEY`
+
+> 💡 **Multi-key rotation** distributes load across keys to avoid hitting free tier rate limits. Grok acts as a safety net when all Gemini keys are exhausted.
 
 #### 6. Run Server
 ```bash
@@ -1049,6 +1080,10 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_API_KEY_2
+        sync: false
+      - key: GrokAI_API_KEY
+        sync: false
 ```
 
 #### Deployment Steps
@@ -1058,7 +1093,9 @@ services:
 3. **Select Repository**
 4. **Configure Environment Variables**:
    - `HONEYPOT_API_KEY`: Your API key for authentication
-   - `GEMINI_API_KEY`: Your Google Gemini key
+   - `GEMINI_API_KEY`: Primary Google Gemini key
+   - `GEMINI_API_KEY_2`: Secondary Gemini key (for rotation)
+   - `GrokAI_API_KEY`: Grok/xAI key (fallback provider)
 5. **Deploy**
 
 ### Production URL

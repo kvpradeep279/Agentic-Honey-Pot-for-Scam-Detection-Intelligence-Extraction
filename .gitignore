@@ -20,10 +20,16 @@ doc.txt
 # Image files
 *.png
 
-# Test files (local testing only)
+# Test files at root level (local testing only)
 test_*.py
 pytest.ini
 final_verification_test.py
+debug_*.py
+demo_*.py
+
+# BUT allow the testing/ folder (pushed to GitHub)
+!testing/
+!testing/**
 
 # Python cache
 __pycache__/
@@ -85,3 +91,12 @@ htmlcov/
 
 # Local test files (keep test_local.py but ignore outputs)
 test_output/
+
+# Temp/audit files
+git_status.txt
+git_diff_stat.txt
+gitignore_content.txt
+tracked_files.txt
+all_files.txt
+scam_diff.txt
+

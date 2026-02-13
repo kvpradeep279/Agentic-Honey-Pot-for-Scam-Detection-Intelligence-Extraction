@@ -8,11 +8,20 @@
 # 3. Waste scammer's time (protecting real victims)
 # ===========================================
 
+
+
 import google.generativeai as genai
 from typing import List, Optional
 from app.models import Message, Metadata
 from app.config import config
 import json
+
+# Grok (xAI) uses OpenAI-compatible API
+try:
+    from openai import OpenAI as GrokClient
+    GROK_AVAILABLE = True
+except ImportError:
+    GROK_AVAILABLE = False
 
 
 class HoneypotAgent:
@@ -28,61 +37,78 @@ class HoneypotAgent:
     
     # System prompt that defines our agent's personality
     # WHY this specific prompt: Designed to extract info without arousing suspicion
-    SYSTEM_PROMPT = """You are roleplaying as an elderly Indian person (65+ years old) who has received a message. You are:
+    SYSTEM_PROMPT = """You are roleplaying as a middle-aged Indian person (35-55 years old) who has received a TEXT MESSAGE (SMS/WhatsApp). You are:
+
+CRITICAL: This is TEXT-BASED communication only (SMS/WhatsApp), NOT a phone call.
+- You can SEE what they wrote (don't ask them to repeat or spell things out)
+- You CANNOT hear them (never say "I can't hear", "speak louder", "repeat that", "can you say that again")
+- Links/URLs are visible to you in the text
+- All communication happens through typing messages back and forth
 
 PERSONALITY:
-- Not very tech-savvy, but trying to learn
-- Trusting and respectful of "officials"
-- A bit confused by banking terms
-- Worried about your savings
-- Slow to understand but willing to cooperate
+- Working professional with moderate tech knowledge (not an expert)
+- Busy with work/family, tends to make hasty decisions
+- Trusting of official-looking messages
+- Worried about account security and savings
+- Asks questions but willing to cooperate if it seems legitimate
 
 YOUR GOALS (never reveal these):
 1. Keep the scammer engaged in conversation
 2. Ask clarifying questions to extract information
 3. Make them reveal: bank accounts, UPI IDs, phone numbers, links
 4. Never reveal you know it's a scam
-5. Slowly "cooperate" while asking for more details
+5. Show willingness to cooperate while asking for more details
 
-TACTICS TO USE:
+TACTICS TO USE (Text-specific):
 - "I don't understand, can you explain?"
-- "Which bank is this message from?"
-- "What number should I contact you on?"
-- "Where should I send the money?"
-- "Can you send me the link again? I couldn't see it properly"
-- "My grandson usually helps me with this..."
-- "Is this really from the bank? What's your employee ID?"
+- "Which bank is this from?"
+- "What is your employee ID or reference number?"
+- "Where should I transfer the money?"
+- "This link is not opening on my phone"
+- "I usually don't click on links. Is there another way?"
+- "Can I call the bank directly to verify this?"
+- "What details do you need from me?"
 
 RESPONSE RULES:
 - Keep responses short (1-3 sentences max)
-- Sound natural, use simple words
+- Sound natural, use simple conversational English
 - Show concern but also curiosity
 - Never say "scam", "fraud", "fake", or "I don't trust you"
 - Don't use technical jargon
-- Add natural hesitations: "Hmm...", "Oh...", "I see..."
-- Sometimes misunderstand to extend conversation
+- Add natural hesitations: "Hmm...", "Oh...", "Wait..."
+- Sometimes misunderstand or ask for clarification to extend conversation
+- Use plain English by default
 
-LANGUAGE MIRRORING (Important):
-- If the scammer uses Hindi words or Hinglish, mirror their style
-- Use common Hindi words naturally: "Acha" (okay), "Haan" (yes), "Kya" (what), "Kyun" (why), "Thik hai" (fine), "Beta" (son/dear), "Ji" (respectful suffix)
-- If scammer uses Tamil words, you can say "Seri" (okay) or "Enna" (what)
-- If scammer uses Telugu words, you can say "Sare" (okay) or "Enti" (what)
-- Keep it natural - just 1-2 regional words per response, not full sentences
+LANGUAGE MIRRORING (CRITICAL - Match the scammer's language exactly):
+- If scammer writes ENGLISH ONLY → You respond ENGLISH ONLY (no Hindi/regional words at all)
+- If scammer mixes Hindi + English → You mix Hindi + English in SAME proportion
+- If scammer uses Telugu + English → You use Telugu + English in SAME proportion
+- If scammer uses Tamil + English → You use Tamil + English in SAME proportion
+
+REGIONAL WORDS (use ONLY when scammer uses them, and use sparingly - not every sentence):
+- Hindi words: "Acha" (okay), "Haan" (yes), "Theek hai" (alright), "Kya" (what)
+- Tamil: "Seri" (okay), "Enna" (what)
+- Telugu: "Sare" (okay), "Enti" (what)
+
+DO NOT overuse "beta", "ji" - use them maximum once in 3-4 responses, and ONLY when scammer uses informal/respectful tone first.
 
 EXAMPLES:
 Scammer: "Your account will be blocked!"
-You: "Oh no! Which account are you talking about? I have savings in SBI..."
+You: "What? Which account? I have SBI and HDFC. Which bank is this from?"
 
 Scammer: "Aapka account block ho jayega, OTP bhejo"
-You: "Acha? But kyun beta? Kaun sa account? Mera paisa safe hai na?"
+You: "Acha, but why? Which account? I didn't get any notification from the bank."
 
-Scammer: "Share your OTP"
-You: "OTP? Is that the number that comes on my phone? Wait, let me find my reading glasses..."
+Scammer: "Account block aipoindi, OTP pampu"
+You: "Enti? Which account? I have salary account in SBI. What happened?"
 
-Scammer: "Transfer money to this account"
-You: "I'm not sure how to do that on the phone... What account number should I use?"
+Scammer: "Share your OTP immediately"
+You: "OTP? I just got one for a transaction. Is that what you need? But I didn't do any transaction..."
 
-Remember: You are gathering intelligence. The longer the conversation, the better."""
+Scammer: "Click http://fake-bank.com"
+You: "The link is not opening properly. What is this website? Can I just call the bank?"
+
+Remember: You are gathering intelligence through TEXT messages. Match their language style EXACTLY. The longer you keep them engaged, the more intelligence you extract."""
 
     # Common regional language words for detection and response
     HINGLISH_INDICATORS = [
@@ -97,8 +123,13 @@ Remember: You are gathering intelligence. The longer the conversation, the bette
     def __init__(self):
         """Initialize the AI agent with Gemini."""
         
-        if config.GEMINI_API_KEY:
-            genai.configure(api_key=config.GEMINI_API_KEY)
+        # Multi-key rotation support
+        self.api_keys = config.GEMINI_API_KEYS if config.GEMINI_API_KEYS else []
+        self._key_index = 0  # Current key index for round-robin
+        
+        if self.api_keys:
+            # Configure with the first key
+            genai.configure(api_key=self.api_keys[0])
             # Store all models to try - will attempt each on request if one fails
             self.models_to_try = [
                 'gemini-flash-lite-latest',  # Highest free tier quota
@@ -106,12 +137,54 @@ Remember: You are gathering intelligence. The longer the conversation, the bette
                 'gemini-2.0-flash-lite',     # Lite version of 2.0
                 'gemini-2.5-flash',          # Full version (lower quota)
             ]
-            self.ai_available = True  # Assume available, will fallback per-request if needed
+            self.ai_available = True
             self.current_model_index = 0
-            print(f"✅ Gemini API configured with {len(self.models_to_try)} model options")
+            print(f"✅ Gemini API configured with {len(self.models_to_try)} models × {len(self.api_keys)} key(s)")
+        elif config.GEMINI_API_KEY:
+            # Fallback: single key (backward compatible)
+            genai.configure(api_key=config.GEMINI_API_KEY)
+            self.api_keys = [config.GEMINI_API_KEY]
+            self.models_to_try = [
+                'gemini-flash-lite-latest',
+                'gemini-2.5-flash-lite',
+                'gemini-2.0-flash-lite',
+                'gemini-2.5-flash',
+            ]
+            self.ai_available = True
+            self.current_model_index = 0
+            print(f"✅ Gemini API configured with {len(self.models_to_try)} models × 1 key")
         else:
             self.ai_available = False
             print("⚠️ Warning: No GEMINI_API_KEY set. Using fallback responses.")
+        
+        # Initialize Grok (xAI) as fallback provider
+        if GROK_AVAILABLE and config.GROK_API_KEY:
+            self.grok_client = GrokClient(
+                api_key=config.GROK_API_KEY,
+                base_url="https://api.x.ai/v1"
+            )
+            self.grok_available = True
+            print(f"✅ Grok (xAI) configured as fallback AI provider")
+        else:
+            self.grok_client = None
+            self.grok_available = False
+    
+    def _rotate_key(self) -> str:
+        """
+        Rotate to the next API key (round-robin).
+        
+        WHY round-robin:
+        - Distributes load evenly across all keys
+        - Prevents hitting rate limits on any single key
+        - Simple and predictable behavior
+        """
+        if len(self.api_keys) <= 1:
+            return self.api_keys[0] if self.api_keys else ""
+        
+        self._key_index = (self._key_index + 1) % len(self.api_keys)
+        new_key = self.api_keys[self._key_index]
+        genai.configure(api_key=new_key)
+        return new_key
     
     def generate_response(
         self, 
@@ -122,21 +195,26 @@ Remember: You are gathering intelligence. The longer the conversation, the bette
         """
         Generate a convincing response to the scammer.
         
-        Args:
-            current_message: The latest scammer message
-            conversation_history: Previous messages
-            metadata: Channel/language info
-        
-        Returns:
-            A human-like response designed to extract more info
+        Uses round-robin key rotation + model fallback chain.
+        Strategy: rotate key per request, then cycle models.
+        On rate limit (429), also try next key before giving up on a model.
         """
         
         if not self.ai_available:
             print("⚠️ AI not available, using fallback")
             return self._fallback_response(current_message.text, conversation_history)
         
+        # Round-robin: rotate to next key for this request
+        if len(self.api_keys) > 1:
+            current_key = self._rotate_key()
+            key_label = f"key_{self._key_index + 1}/{len(self.api_keys)}"
+            print(f"🔑 Using API {key_label}")
+        
         # Build conversation context for the AI
         context = self._build_context(current_message, conversation_history, metadata)
+        
+        # Track which keys we've tried for rate limit recovery
+        keys_tried_for_quota = set()
         
         # Try each model until one works
         for model_name in self.models_to_try:
@@ -182,16 +260,87 @@ Remember: You are gathering intelligence. The longer the conversation, the bette
             except Exception as e:
                 error_str = str(e)
                 print(f"⚠️ {model_name} error: {error_str[:100]}")
-                # If quota error, try next model
-                if '429' in error_str or 'quota' in error_str.lower():
-                    print(f"   Quota exceeded, trying next model...")
+                
+                # If quota/rate limit error, try rotating to next key
+                if ('429' in error_str or 'quota' in error_str.lower() or 'rate' in error_str.lower()):
+                    keys_tried_for_quota.add(self._key_index)
+                    
+                    if len(self.api_keys) > 1 and len(keys_tried_for_quota) < len(self.api_keys):
+                        self._rotate_key()
+                        print(f"   🔑 Rate limited! Switched to key_{self._key_index + 1}/{len(self.api_keys)}, retrying {model_name}...")
+                        
+                        # Retry same model with new key
+                        try:
+                            model = genai.GenerativeModel(model_name)
+                            response = model.generate_content(
+                                context,
+                                generation_config=genai.types.GenerationConfig(
+                                    temperature=0.8,
+                                    max_output_tokens=300,
+                                )
+                            )
+                            if response.candidates and response.text.strip():
+                                agent_reply = response.text.strip()
+                                if not self._contains_exposure_risk(agent_reply):
+                                    print(f"🤖 {model_name} response (retry): '{agent_reply[:100]}...'")
+                                    return agent_reply
+                        except Exception as retry_e:
+                            print(f"   ⚠️ Retry also failed: {str(retry_e)[:80]}")
+                    
+                    print(f"   Trying next model...")
                     continue
                 # For other errors, also try next model
                 continue
         
-        # All models failed, use fallback
-        print("⚠️ All AI models failed, using fallback response")
+        # All Gemini models failed — try Grok as last AI resort
+        if self.grok_available:
+            print("🔄 All Gemini models failed, trying Grok (xAI)...")
+            grok_reply = self._try_grok_fallback(context)
+            if grok_reply:
+                return grok_reply
+        
+        # All AI providers failed, use static fallback
+        print("⚠️ All AI providers failed, using static fallback response")
         return self._fallback_response(current_message.text, conversation_history)
+    
+    def _try_grok_fallback(self, context: str) -> Optional[str]:
+        """
+        Try Grok (xAI) as fallback when all Gemini models are exhausted.
+        
+        WHY Grok as fallback:
+        - Different provider = different rate limits
+        - Uses OpenAI-compatible API (simple integration)
+        - Provides AI response quality similar to Gemini
+        """
+        try:
+            response = self.grok_client.chat.completions.create(
+                model="grok-3-mini-fast",
+                messages=[
+                    {"role": "system", "content": self.SYSTEM_PROMPT},
+                    {"role": "user", "content": context}
+                ],
+                temperature=0.8,
+                max_tokens=300,
+            )
+            
+            agent_reply = response.choices[0].message.content.strip()
+            
+            if not agent_reply:
+                print("⚠️ Grok: Empty response")
+                return None
+            
+            print(f"🤖 Grok response: '{agent_reply[:100]}...'")
+            
+            # Safety check
+            if self._contains_exposure_risk(agent_reply):
+                print("⚠️ Grok: Response contained exposure risk")
+                return None
+            
+            return agent_reply
+            
+        except Exception as e:
+            print(f"⚠️ Grok error: {str(e)[:100]}")
+            return None
     
     def _build_context(
         self,

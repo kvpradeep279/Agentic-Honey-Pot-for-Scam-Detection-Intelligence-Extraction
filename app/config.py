@@ -7,6 +7,7 @@
 
 import os
 from dotenv import load_dotenv
+from typing import List
 
 # Load environment variables from .env file
 load_dotenv()
@@ -30,8 +31,30 @@ class Config:
     # Get your free API key at: https://makersuite.google.com/app/apikey
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     
+    # Multi-key rotation: Load all available Gemini API keys
+    # Supports GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3, ...
+    # WHY: Free tier has rate limits; rotating keys distributes load
+    @staticmethod
+    def _load_gemini_keys() -> List[str]:
+        keys = []
+        # Primary key
+        primary = os.getenv("GEMINI_API_KEY", "")
+        if primary:
+            keys.append(primary)
+        # Additional keys (GEMINI_API_KEY_2, _3, _4, ...)
+        for i in range(2, 11):  # Support up to 10 keys
+            key = os.getenv(f"GEMINI_API_KEY_{i}", "")
+            if key:
+                keys.append(key)
+        return keys
+    
+    GEMINI_API_KEYS: List[str] = []
+    
     # OpenAI API key (alternative if you have credits)
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    
+    # Grok (xAI) API key — uses OpenAI-compatible endpoint as fallback
+    GROK_API_KEY: str = os.getenv("GrokAI_API_KEY", "")
     
     # GUVI Callback URL - where we send final results
     GUVI_CALLBACK_URL: str = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
@@ -48,3 +71,6 @@ class Config:
 
 # Create a global config instance
 config = Config()
+# Load multi-key list after instance creation
+config.GEMINI_API_KEYS = Config._load_gemini_keys()
+print(f"🔑 Loaded {len(config.GEMINI_API_KEYS)} Gemini API key(s)")
