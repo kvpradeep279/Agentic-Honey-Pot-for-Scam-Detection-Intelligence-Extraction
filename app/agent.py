@@ -16,12 +16,12 @@ from app.models import Message, Metadata
 from app.config import config
 import json
 
-# Grok (xAI) uses OpenAI-compatible API
+# Groq uses OpenAI-compatible API
 try:
-    from openai import OpenAI as GrokClient
-    GROK_AVAILABLE = True
+    from openai import OpenAI as GroqClient
+    GROQ_AVAILABLE = True
 except ImportError:
-    GROK_AVAILABLE = False
+    GROQ_AVAILABLE = False
 
 
 class HoneypotAgent:
@@ -157,17 +157,17 @@ Remember: You are gathering intelligence through TEXT messages. Match their lang
             self.ai_available = False
             print("⚠️ Warning: No GEMINI_API_KEY set. Using fallback responses.")
         
-        # Initialize Grok (xAI) as fallback provider
-        if GROK_AVAILABLE and config.GROK_API_KEY:
-            self.grok_client = GrokClient(
+        # Initialize Groq as fallback provider
+        if GROQ_AVAILABLE and config.GROK_API_KEY:
+            self.groq_client = GroqClient(
                 api_key=config.GROK_API_KEY,
-                base_url="https://api.x.ai/v1"
+                base_url="https://api.groq.com/openai/v1"
             )
-            self.grok_available = True
-            print(f"✅ Grok (xAI) configured as fallback AI provider")
+            self.groq_available = True
+            print(f"✅ Groq configured as fallback AI provider")
         else:
-            self.grok_client = None
-            self.grok_available = False
+            self.groq_client = None
+            self.groq_available = False
     
     def _rotate_key(self) -> str:
         """
@@ -301,29 +301,29 @@ Remember: You are gathering intelligence through TEXT messages. Match their lang
                 # For other errors, also try next model
                 continue
         
-        # All Gemini models failed — try Grok as last AI resort
-        if self.grok_available:
-            print("🔄 All Gemini models failed, trying Grok (xAI)...")
-            grok_reply = self._try_grok_fallback(context)
-            if grok_reply:
-                return grok_reply
+        # All Gemini models failed — try Groq as last AI resort
+        if self.groq_available:
+            print("🔄 All Gemini models failed, trying Groq...")
+            groq_reply = self._try_groq_fallback(context)
+            if groq_reply:
+                return groq_reply
         
         # All AI providers failed, use static fallback
         print("⚠️ All AI providers failed, using static fallback response")
         return self._fallback_response(current_message.text, conversation_history)
     
-    def _try_grok_fallback(self, context: str) -> Optional[str]:
+    def _try_groq_fallback(self, context: str) -> Optional[str]:
         """
-        Try Grok (xAI) as fallback when all Gemini models are exhausted.
+        Try Groq as fallback when all Gemini models are exhausted.
         
-        WHY Grok as fallback:
+        WHY Groq as fallback:
         - Different provider = different rate limits
         - Uses OpenAI-compatible API (simple integration)
-        - Provides AI response quality similar to Gemini
+        - Fast inference with Llama models
         """
         try:
-            response = self.grok_client.chat.completions.create(
-                model="grok-3-mini-fast",
+            response = self.groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
                 messages=[
                     {"role": "system", "content": self.SYSTEM_PROMPT},
                     {"role": "user", "content": context}
@@ -335,20 +335,20 @@ Remember: You are gathering intelligence through TEXT messages. Match their lang
             agent_reply = response.choices[0].message.content.strip()
             
             if not agent_reply:
-                print("⚠️ Grok: Empty response")
+                print("⚠️ Groq: Empty response")
                 return None
             
-            print(f"🤖 Grok response: '{agent_reply[:100]}...'")
+            print(f"🤖 Groq response: '{agent_reply[:100]}...'")
             
             # Safety check
             if self._contains_exposure_risk(agent_reply):
-                print("⚠️ Grok: Response contained exposure risk")
+                print("⚠️ Groq: Response contained exposure risk")
                 return None
             
             return agent_reply
             
         except Exception as e:
-            print(f"⚠️ Grok error: {str(e)[:100]}")
+            print(f"⚠️ Groq error: {str(e)[:100]}")
             return None
     
     def _build_context(
