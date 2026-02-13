@@ -97,7 +97,7 @@ def verify_api_key(x_api_key: str = Header(None)) -> bool:
 
 # ----- API Endpoints -----
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root():
     """
     Root endpoint - basic health check.
