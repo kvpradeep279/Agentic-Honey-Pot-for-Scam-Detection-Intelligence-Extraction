@@ -227,7 +227,7 @@ Remember: You are gathering intelligence through TEXT messages. Match their lang
                     context,
                     generation_config=genai.types.GenerationConfig(
                         temperature=0.8,  # Slightly creative for natural responses
-                        max_output_tokens=300,  # Enough for 1-3 sentences
+                        max_output_tokens=800,  # Enough for full response without truncation
                     )
                 )
                 
@@ -239,6 +239,13 @@ Remember: You are gathering intelligence through TEXT messages. Match their lang
                 # Debug: Check if response was blocked or truncated
                 finish_reason = response.candidates[0].finish_reason if response.candidates else 'NO CANDIDATES'
                 print(f"🤖 {model_name} finish_reason: {finish_reason}")
+                
+                # Handle safety-blocked responses (finish_reason 8 = BLOCKLIST)
+                # Check if candidate has valid parts before accessing .text
+                candidate = response.candidates[0]
+                if not candidate.content or not candidate.content.parts:
+                    print(f"⚠️ {model_name}: No valid content parts (finish_reason={finish_reason}), trying next model")
+                    continue
                 
                 # Extract and clean the response
                 agent_reply = response.text.strip()
@@ -276,14 +283,16 @@ Remember: You are gathering intelligence through TEXT messages. Match their lang
                                 context,
                                 generation_config=genai.types.GenerationConfig(
                                     temperature=0.8,
-                                    max_output_tokens=300,
+                                    max_output_tokens=800,
                                 )
                             )
-                            if response.candidates and response.text.strip():
-                                agent_reply = response.text.strip()
-                                if not self._contains_exposure_risk(agent_reply):
-                                    print(f"🤖 {model_name} response (retry): '{agent_reply[:100]}...'")
-                                    return agent_reply
+                            if response.candidates:
+                                retry_candidate = response.candidates[0]
+                                if retry_candidate.content and retry_candidate.content.parts:
+                                    agent_reply = response.text.strip()
+                                    if agent_reply and not self._contains_exposure_risk(agent_reply):
+                                        print(f"🤖 {model_name} response (retry): '{agent_reply[:100]}...'")
+                                        return agent_reply
                         except Exception as retry_e:
                             print(f"   ⚠️ Retry also failed: {str(retry_e)[:80]}")
                     
@@ -320,7 +329,7 @@ Remember: You are gathering intelligence through TEXT messages. Match their lang
                     {"role": "user", "content": context}
                 ],
                 temperature=0.8,
-                max_tokens=300,
+                max_tokens=800,
             )
             
             agent_reply = response.choices[0].message.content.strip()
@@ -426,7 +435,7 @@ Remember: You are gathering intelligence through TEXT messages. Match their lang
                 "Acha? Blocked? Abhi to kal hi paisa nikala tha... Kya hua beta?",
             ],
             'otp': [
-                "OTP? I'm not sure what that is... My grandson usually helps me with these things. Can you explain?",
+                "OTP? I think I've seen those before when paying bills... but why do you need it? Can you explain?",
                 "You mean the number that comes on my phone? I got so many messages, which one do you need?",
                 "OTP... is that like a password? My phone is showing some numbers, is that it?",
                 "I see a message from the bank with numbers. Should I read the whole message to you?",
@@ -437,17 +446,17 @@ Remember: You are gathering intelligence through TEXT messages. Match their lang
                 "Acha OTP? Message mein likha hai share mat karo... lekin aap bank wale ho na? Thik hai?",
                 "OTP matlab kya? Mere phone pe bahut message aate hain... kaun sa doon?",
                 "Haan beta, ek number aaya hai phone pe. Aap bank se ho to de deta hoon...",
-                "OTP? Mera pota help karta hai yeh sab mein. Aap explain karo kya karna hai?",
+                "OTP? Haan aata hai phone pe kabhi kabhi. Aap explain karo kya karna hai exactly?",
             ],
             'upi': [
                 "I don't know much about UPI. What account should I send to? Can you give me the details?",
-                "UPI? My grandson set that up for me. What is your UPI ID? I'll ask him to help me send.",
+                "UPI? Haan, I use it for bills. What is your UPI ID? Let me open the app.",
                 "How do I do UPI transfer? Can you give me your account number instead? That I know how to do.",
                 "I have PhonePe and Paytm. Which one should I use? What is your number?",
-                "UPI ID... is that like scammer.help@bank? Can you spell it out slowly for me?",
+                "UPI ID... what format is that? Like name@bank? Can you spell it out for me?",
             ],
             'upi_hinglish': [
-                "UPI? Haan mera pota ne kiya tha. Aapka UPI ID kya hai? Main try karta hoon...",
+                "UPI? Haan mera phone pe hai. Aapka UPI ID kya hai? Main try karta hoon...",
                 "Acha UPI? PhonePe hai mere paas. Aapka number do, bhejne ki koshish karta hoon.",
                 "UPI ID? Woh @ wala na? Aap apna ID batao, main likh leta hoon...",
                 "Mujhe UPI nahi aata properly. Account number do, woh main kar lunga...",
@@ -457,20 +466,20 @@ Remember: You are gathering intelligence through TEXT messages. Match their lang
                 "I can't see the link properly on my phone. Can you send it again or tell me what it says?",
                 "My phone is old, the link is not opening. Can you tell me what website is this?",
                 "I clicked but nothing happened. Can you give me the website name? I'll type it myself.",
-                "My grandson says don't click links... but you're from bank, so it's safe, right? Send again please.",
+                "I've heard we shouldn't click links... but you're from the bank, so it's safe, right? Send again please.",
                 "The link shows some warning on my phone. Is this the correct link? What is the website name?",
             ],
             'link_hinglish': [
                 "Link? Mere phone pe nahi khul raha. Website ka naam batao, main type kar lunga...",
                 "Acha link? Mera phone purana hai, nahi khul raha. Phir se bhejo ya naam batao...",
                 "Link pe click kiya lekin kuch nahi hua. Yeh safe hai na? Phir se bhejo...",
-                "Mera pota bolta hai link mat click karo... lekin aap bank se ho to thik hai na?",
+                "Meri wife bolti hai link mat click karo... lekin aap bank se ho to thik hai na?",
                 "Link mein warning aa raha hai. Yeh sahi link hai? Website naam kya hai?",
             ],
             'call': [
                 "Okay, what number should I call? I'll write it down...",
                 "Should I call now? What is the number? And what name should I ask for?",
-                "I will call, but my hearing is not good. Can you call me instead? My number is... wait, should I give it?",
+                "I'll call, but I'm in a meeting right now. Can you call me instead? My number is... wait, should I give it?",
                 "What number? Is it a toll-free number? I don't have much balance on my phone.",
                 "Okay beta, give me the number slowly. Also what time should I call? Who will answer?",
             ],
@@ -482,14 +491,14 @@ Remember: You are gathering intelligence through TEXT messages. Match their lang
                 "Acha ji, number de do. Kab call karoon? Kaun se department mein connect hoga?",
             ],
             'urgent': [
-                "Please wait, I'm an old person and need time to understand. What exactly do you need from me?",
+                "Please wait, I'm at work and can't rush. What exactly do you need from me?",
                 "Why so urgent? You're scaring me... Let me call my son first, he handles my bank matters.",
-                "Beta, don't rush me. At my age, I need to be careful. Now explain slowly what happened.",
+                "Don't rush me, I need to be careful with my accounts. Now explain slowly what happened.",
                 "Urgent urgent... everyone says urgent. But what if I make a mistake? Let me think...",
                 "I understand it's urgent, but I need to verify. What is your employee code? Which branch?",
             ],
             'urgent_hinglish': [
-                "Arey itni jaldi kyun? Main buddha aadmi hoon, dhire batao kya hua...",
+                "Arey itni jaldi kyun? Main office mein hoon, dhire batao kya hua...",
                 "Urgent? Acha acha, lekin pehle batao aap kaun ho? Bank se ho kya sach mein?",
                 "Beta jaldi mat karo. Mujhe time lagta hai samajhne mein. Explain karo properly...",
                 "Haan haan samajh gaya urgent hai. Lekin kya karna hai exactly? Step by step batao...",
