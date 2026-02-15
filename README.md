@@ -857,13 +857,13 @@ flowchart TD
     Scam -->|No| Stop[❌ No Callback]
     Scam -->|Yes| Intel{Check Intelligence}
     
-    Intel -->|3+ Items & >10 msgs| Send[📤 Send Callback]
-    Intel -->|2 Items & >15 msgs| Send
-    Intel -->|1 Item & >20 msgs| Send
-    Intel -->|Keywords & >25 msgs| Send
-    Intel -->|Max Turns (35)| Send
+    Intel -->|"3+ Items & >10 msgs"| Send[📤 Send Callback]
+    Intel -->|"2 Items & >15 msgs"| Send
+    Intel -->|"1 Item & >20 msgs"| Send
+    Intel -->|"Keywords & >25 msgs"| Send
+    Intel -->|"Max Turns (35)"| Send
     
-    Intel -->|Not Enough| Wait[⏳ Continue Engagement]
+    Intel -->|"Not Enough"| Wait[⏳ Continue Engagement]
     
     Send --> Async[🚀 Async POST to GUVI]
     Async --> Done[✅ Done (Mark Session Sent)]
