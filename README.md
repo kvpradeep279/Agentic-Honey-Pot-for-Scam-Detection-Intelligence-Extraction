@@ -609,26 +609,26 @@ The system uses a **3-tier AI resilience chain**: round-robin Gemini key rotatio
 
 ```mermaid
 flowchart TD
-    A[📨 Scammer Message] --> B{AI Available?}
-    B -->|No| STATIC[📝 Static Fallback Response]
-    B -->|Yes| RR[🔑 Rotate to Next Gemini Key<br/>Round-Robin]
+    A["📨 Scammer Message"] --> B{"AI Available?"}
+    B -->|No| STATIC["📝 Static Fallback Response"]
+    B -->|Yes| RR["🔑 Rotate to Next Gemini Key<br/>Round-Robin"]
     
-    RR --> M1[Try gemini-flash-lite-latest]
-    M1 -->|✅ Success| H[✅ Return Response]
-    M1 -->|❌ Fail| M1R{Rate Limited?}
-    M1R -->|Yes & keys left| SWAP1[🔑 Switch Key & Retry]
+    RR --> M1["Try gemini-flash-lite-latest"]
+    M1 -->|"✅ Success"| H["✅ Return Response"]
+    M1 -->|"❌ Fail"| M1R{"Rate Limited?"}
+    M1R -->|"Yes & keys left"| SWAP1["🔑 Switch Key & Retry"]
     SWAP1 -->|✅| H
     SWAP1 -->|❌| M2
-    M1R -->|No / keys exhausted| M2[Try gemini-2.5-flash-lite]
+    M1R -->|"No / keys exhausted"| M2["Try gemini-2.5-flash-lite"]
     
     M2 -->|✅| H
-    M2 -->|❌| M3[Try gemini-2.0-flash-lite]
+    M2 -->|❌| M3["Try gemini-2.0-flash-lite"]
     M3 -->|✅| H
-    M3 -->|❌| M4[Try gemini-2.5-flash]
+    M3 -->|❌| M4["Try gemini-2.5-flash"]
     M4 -->|✅| H
     M4 -->|❌| GROK
     
-    GROK[🔄 Try Grok / xAI<br/>grok-3-mini-fast] -->|✅| H
+    GROK["🔄 Try Grok Cloud<br/>llama-3.3-70b-versatile"] -->|✅| H
     GROK -->|❌| STATIC
     STATIC --> H
     
@@ -853,20 +853,20 @@ The callback logic balances **collecting enough intelligence** vs **reporting qu
 
 ```mermaid
 flowchart TD
-    Start[📩 New Message Processed] --> Scam{Is Scam?}
-    Scam -->|No| Stop[❌ No Callback]
-    Scam -->|Yes| Intel{Check Intelligence}
+    Start["📩 New Message Processed"] --> Scam{"Is Scam?"}
+    Scam -->|No| Stop["❌ No Callback"]
+    Scam -->|Yes| Intel{"Check Intelligence"}
     
-    Intel -->|"3+ Items & >10 msgs"| Send[📤 Send Callback]
+    Intel -->|"3+ Items & >10 msgs"| Send["📤 Send Callback"]
     Intel -->|"2 Items & >15 msgs"| Send
     Intel -->|"1 Item & >20 msgs"| Send
     Intel -->|"Keywords & >25 msgs"| Send
     Intel -->|"Max Turns (35)"| Send
     
-    Intel -->|"Not Enough"| Wait[⏳ Continue Engagement]
+    Intel -->|"Not Enough"| Wait["⏳ Continue Engagement"]
     
-    Send --> Async[🚀 Async POST to GUVI]
-    Async --> Done[✅ Done (Mark Session Sent)]
+    Send --> Async["🚀 Async POST to GUVI"]
+    Async --> Done["✅ Done (Mark Session Sent)"]
 ```
 
 The system sends a callback to GUVI when:
