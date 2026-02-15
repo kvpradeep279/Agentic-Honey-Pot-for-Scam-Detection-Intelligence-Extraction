@@ -31,6 +31,7 @@ class ConversationSession:
         self.message_count = 0
         self.scam_detected = False
         self.scam_confidence = 0.0
+        self.scam_type = "unknown"  # bank_fraud, upi_fraud, phishing, etc.
         self.intelligence = ExtractedIntelligence()
         self.agent_notes: list = []
         self.callback_sent = False  # Prevent duplicate callbacks
@@ -73,6 +74,11 @@ class ConversationSession:
             if phone not in self.intelligence.phoneNumbers:
                 self.intelligence.phoneNumbers.append(phone)
         
+        # Add unique email addresses
+        for email in new_intel.emailAddresses:
+            if email not in self.intelligence.emailAddresses:
+                self.intelligence.emailAddresses.append(email)
+        
         # Add unique suspicious keywords
         for keyword in new_intel.suspiciousKeywords:
             if keyword not in self.intelligence.suspiciousKeywords:
@@ -107,7 +113,7 @@ class SessionManager:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
-                    cls._instance.sessions: Dict[str, ConversationSession] = {}
+                    cls._instance.sessions = {}  # Dict[str, ConversationSession]
         return cls._instance
     
     def get_or_create_session(self, session_id: str) -> ConversationSession:

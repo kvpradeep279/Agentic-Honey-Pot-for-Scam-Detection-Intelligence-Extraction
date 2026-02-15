@@ -507,6 +507,7 @@ Our system automatically extracts actionable intelligence from scam conversation
 | **IFSC Codes** | 11 alphanumeric chars | Bank code validation | Identify scammer's bank branch |
 | **UPI IDs** | name@provider | Pattern: `*@ybl`, `*@paytm` | Block fraudulent UPI handles |
 | **Phone Numbers** | +91-XXXXXXXXXX | Indian mobile format | Trace scammer's identity |
+| **Email Addresses** | user@domain.com | RFC-compliant regex | Report fraudulent email accounts |
 | **Phishing Links** | HTTP/HTTPS URLs | Domain analysis | Takedown malicious websites |
 | **Keywords** | Scam phrases | NLP extraction | Improve detection patterns |
 
@@ -560,6 +561,17 @@ r'[a-zA-Z0-9][-a-zA-Z0-9]*\.(?:com|in|co\.in|org|net)'
 # Examples detected:
 # - http://fake-sbi.com/kyc
 # - sbi-verify.secure-bank.co.in
+```
+
+#### Email Addresses
+```python
+# Pattern: RFC-compliant email format
+r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+
+# Examples detected:
+# - support@fake-bank.com
+# - scammer@gmail.com
+# - offers@prize-lottery.in
 ```
 
 ### Obfuscated Data Extraction
@@ -888,14 +900,21 @@ Content-Type: application/json
 ```json
 {
   "sessionId": "unique-session-id-123",
+  "status": "completed",
   "scamDetected": true,
+  "scamType": "bank_fraud",
   "totalMessagesExchanged": 15,
   "extractedIntelligence": {
     "bankAccounts": ["1234567890123456"],
     "upiIds": ["scammer@ybl", "fraud@paytm"],
     "phishingLinks": ["http://fake-sbi.com/kyc"],
     "phoneNumbers": ["+91-9876543210"],
+    "emailAddresses": ["support@fake-bank.com"],
     "suspiciousKeywords": ["blocked", "urgent", "kyc", "otp", "verify"]
+  },
+  "engagementMetrics": {
+    "engagementDurationSeconds": 120,
+    "totalMessagesExchanged": 15
   },
   "agentNotes": "Bank fraud scam targeting SBI customers. Scammer impersonated bank employee and used urgency tactics. Requested OTP, account details, and payment via UPI."
 }
@@ -903,13 +922,18 @@ Content-Type: application/json
 
 ### Callback Timing Strategy
 
+**Finals Mode (10-turn max):**
+
 | Condition | Trigger Point |
 |-----------|---------------|
-| Rich intel (3+ items) | After 10+ turns (~5 scammer msgs) |
-| Multiple intel (2 items) | After 15+ turns (~8 scammer msgs) |
-| Single real intel | After 20+ turns (~10 scammer msgs) |
-| Keywords only | After 25+ turns (~13 scammer msgs) |
-| Maximum engagement | After 35+ turns (force send) |
+| Rich intel (3+ items) | After 4+ messages (turn 2) |
+| Multiple intel (2 items) | After 4+ messages (turn 2) |
+| Single real intel | After 6+ messages (turn 3) |
+| Keywords only | After 10+ messages (turn 5) |
+| Safety fallback | After 16+ messages (turn 8) |
+| Maximum engagement | After 20 messages (force send) |
+
+> 💡 **Finals Optimization**: Aggressive callback timing ensures intelligence is submitted before max turns reached.
 
 ---
 

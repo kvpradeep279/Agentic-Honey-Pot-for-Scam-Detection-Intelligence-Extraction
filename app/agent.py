@@ -9,7 +9,6 @@
 # ===========================================
 
 
-
 import google.generativeai as genai
 from typing import List, Optional
 from app.models import Message, Metadata
@@ -17,6 +16,7 @@ from app.config import config
 import json
 
 # Groq uses OpenAI-compatible API
+
 try:
     from openai import OpenAI as GroqClient
     GROQ_AVAILABLE = True
@@ -420,6 +420,7 @@ Remember: You are gathering intelligence through TEXT messages. Match their lang
         
         # Multiple response options for each category
         responses = {
+            
             'blocked': [
                 "Oh no! Why is this happening? Which account are you referring to?",
                 "Blocked? But I haven't done anything wrong! Which bank is this message from?",

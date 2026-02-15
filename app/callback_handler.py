@@ -41,8 +41,7 @@ class CallbackHandler:
         - Must have extracted real intelligence (not just keywords)
         - Prevent duplicate callbacks
         
-        Per doc: "The AI Agent has completed sufficient engagement"
-        Example shows 18 messages exchanged - we should wait for substantial engagement.
+        FINALS: Max 10 turns! Callback timing adjusted accordingly.
         """
         
         # Prevent duplicate callbacks
@@ -59,11 +58,13 @@ class CallbackHandler:
         intel = session.intelligence
         
         # Count "real" extracted data (not just keywords)
+        # Include emailAddresses in count!
         real_intel_count = (
             len(intel.bankAccounts) +
             len(intel.upiIds) +
             len(intel.phishingLinks) +
-            len(intel.phoneNumbers)
+            len(intel.phoneNumbers) +
+            len(intel.emailAddresses)
         )
         
         has_real_intel = real_intel_count > 0
@@ -71,34 +72,41 @@ class CallbackHandler:
         has_rich_intel = real_intel_count >= 3  # Rich intelligence (3+ items)
         has_keywords = len(intel.suspiciousKeywords) >= 2
         
-        # Strategy (adjusted for 18-message conversations):
-        # 1. Force send at max turns (35 = ~18 scammer messages)
-        # 2. With rich intel (3+ items) - send at 10+ turns (~5 scammer msgs)
-        # 3. With multiple intel (2 items) - send at 15+ turns (~8 scammer msgs)
-        # 4. With single real intel - send at 20+ turns (~10 scammer msgs)
-        # 5. Keywords only - send at 25+ turns (~13 scammer msgs)
+        # FINALS STRATEGY (max 10 turns!):
+        # Evaluator does UP TO 10 turns - we need to callback before conversation ends
+        # Each turn = 1 scammer msg + 1 agent reply = 2 messages in history
+        # So 10 turns = ~20 messages max
+        # 
+        # AGGRESSIVE TIMING - Send callback early with any intel:
+        # 1. Force send at turn 8+ (16 messages) - leave buffer before max
+        # 2. With ANY real intel - send at turn 3+ (6 messages)
+        # 3. With keywords only - send at turn 5+ (10 messages)
+        # 4. Max safety - send at turn 10 (20 messages)
         
         msg_count = session.message_count
-        max_turns_reached = msg_count >= config.MAX_CONVERSATION_TURNS
         
-        if max_turns_reached:
-            # Force send at max turns
+        # Force send at max turns (safety net)
+        if msg_count >= config.MAX_CONVERSATION_TURNS:
             return True
         
-        if has_rich_intel and msg_count >= 10:
-            # Rich intel (3+ items) + decent engagement
+        # AGGRESSIVE: Any real intel + 3+ turns - SEND NOW!
+        if has_real_intel and msg_count >= 6:
             return True
         
-        if has_multiple_intel and msg_count >= 15:
-            # Multiple intel items (2) + good engagement
+        # Multiple intel found - send immediately at turn 2+
+        if has_multiple_intel and msg_count >= 4:
             return True
         
-        if has_real_intel and msg_count >= 20:
-            # Single real intel + substantial engagement
+        # Rich intel - send at turn 2
+        if has_rich_intel and msg_count >= 4:
             return True
         
-        if has_keywords and msg_count >= 25:
-            # Only keywords? Need very long engagement
+        # Only keywords - wait a bit longer but not too long
+        if has_keywords and msg_count >= 10:
+            return True
+        
+        # Safety: Force send at turn 8 even with no intel
+        if msg_count >= 16:
             return True
         
         # Keep engaging - not ready yet
@@ -121,17 +129,26 @@ class CallbackHandler:
         session.callback_sent = True
         
         try:
-            # Build payload matching GUVI's expected format
+            # Build payload matching GUVI's expected format (FINALS VERSION)
+            # Required fields: status, scamDetected, extractedIntelligence
+            # Optional fields: engagementMetrics, agentNotes, scamType
             payload = {
                 "sessionId": session.session_id,
+                "status": "completed",  # Required for Response Structure points!
                 "scamDetected": session.scam_detected,
+                "scamType": session.scam_type,  # bank_fraud, upi_fraud, phishing, etc.
                 "totalMessagesExchanged": session.message_count,
                 "extractedIntelligence": {
                     "bankAccounts": session.intelligence.bankAccounts,
                     "upiIds": session.intelligence.upiIds,
                     "phishingLinks": session.intelligence.phishingLinks,
                     "phoneNumbers": session.intelligence.phoneNumbers,
+                    "emailAddresses": session.intelligence.emailAddresses,  # Added for finals!
                     "suspiciousKeywords": session.intelligence.suspiciousKeywords
+                },
+                "engagementMetrics": {  # Added for finals! (5 points)
+                    "engagementDurationSeconds": session.get_duration_seconds(),
+                    "totalMessagesExchanged": session.message_count
                 },
                 "agentNotes": session.get_agent_notes_summary()
             }
@@ -176,16 +193,24 @@ class CallbackHandler:
         session.callback_sent = True
         
         try:
+            # Build payload matching GUVI's expected format (FINALS VERSION)
             payload = {
                 "sessionId": session.session_id,
+                "status": "completed",  # Required for Response Structure points!
                 "scamDetected": session.scam_detected,
+                "scamType": session.scam_type,  # bank_fraud, upi_fraud, phishing, etc.
                 "totalMessagesExchanged": session.message_count,
                 "extractedIntelligence": {
                     "bankAccounts": session.intelligence.bankAccounts,
                     "upiIds": session.intelligence.upiIds,
                     "phishingLinks": session.intelligence.phishingLinks,
                     "phoneNumbers": session.intelligence.phoneNumbers,
+                    "emailAddresses": session.intelligence.emailAddresses,  # Added for finals!
                     "suspiciousKeywords": session.intelligence.suspiciousKeywords
+                },
+                "engagementMetrics": {  # Added for finals! (5 points)
+                    "engagementDurationSeconds": session.get_duration_seconds(),
+                    "totalMessagesExchanged": session.message_count
                 },
                 "agentNotes": session.get_agent_notes_summary()
             }

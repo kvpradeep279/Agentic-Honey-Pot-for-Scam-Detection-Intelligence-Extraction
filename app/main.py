@@ -262,6 +262,11 @@ async def honeypot_endpoint(
             hist_intel = scam_detector.extract_intelligence(hist_msg.text)
             session.merge_intelligence(hist_intel)
     
+    # Step 6b: Detect scam type based on all extracted intelligence
+    scam_type = scam_detector.detect_scam_type(current_message.text, session.intelligence)
+    if scam_type != "unknown":
+        session.scam_type = scam_type
+    
     # Step 7: Build simple response (as per Section 8 of problem statement)
     # Only return status and reply - detailed data goes in callback
     response = HoneypotResponse(

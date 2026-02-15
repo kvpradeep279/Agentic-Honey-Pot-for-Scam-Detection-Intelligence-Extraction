@@ -72,6 +72,7 @@ class ExtractedIntelligence(BaseModel):
     upiIds: List[str] = Field(default=[], description="UPI IDs like 'name@bank'")
     phishingLinks: List[str] = Field(default=[], description="Malicious URLs")
     phoneNumbers: List[str] = Field(default=[], description="Phone numbers mentioned")
+    emailAddresses: List[str] = Field(default=[], description="Email addresses found")
     suspiciousKeywords: List[str] = Field(default=[], description="Keywords indicating scam")
 
 
