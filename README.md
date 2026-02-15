@@ -213,19 +213,19 @@ sequenceDiagram
     S->>A: POST /honeypot
     A->>A: Validate API Key
     A->>D: Analyze Message
-    D->>D: Pattern Matching
-    D->>D: Keyword Scoring
+    D->>D: Pattern Matching & Keyword Scoring
     D-->>A: {is_scam, confidence, reasons}
     
     alt Is Scam
+        A->>D: Extract Intelligence (from Input)
+        A->>A: Update Session Data
+        
         A->>AI: Generate Response
         AI->>AI: Maintain Persona
         AI-->>A: Human-like Reply
-        A->>A: Extract Intelligence
-        A->>A: Update Session
         
         opt Sufficient Engagement
-            A->>G: POST Callback
+            A->>G: POST Callback (Async)
             G-->>A: Acknowledged
         end
     end
@@ -406,12 +406,13 @@ flowchart LR
 | 4 | **Financial Keywords** | +0.25 | "lottery", "prize", "refund", "KYC" |
 | 4b | **Job Scam Keywords** | +0.15–0.40 | "selected", "work from home" + payment request |
 | 5 | **Impersonation** | +0.15 | "RBI", "SBI", "customer care", "government" |
-| 6 | **Suspicious Links** | +0.15 | HTTP/HTTPS links (legitimate domains filtered out) |
-| 7 | **UPI IDs** | +0.15* | Pattern: `name@provider` with payment context |
-| 8 | **Phone Numbers** | +0.10* | Indian mobile numbers with suspicious context |
-| 9 | **Bank Accounts** | +0.15 | 9-18 digit account numbers |
-| 10 | **Hinglish Patterns** | +0.15 | Mixed Hindi-English scam phrases |
-| 11 | **Channel Shift** | +0.15 | "WhatsApp", "Telegram", "call me" |
+| 6 | **Suspicious Links** | +0.25 | HTTP/HTTPS links (legitimate domains filtered out) |
+| 7 | **Mixed Language (Hinglish)** | +0.10–0.25 | Scam keywords in mixed Hindi-English (e.g. "jaldi bhejo") |
+| 8 | **Over-Polite Formal Tone** | +0.15 | "Dear Sir/Madam" + financial request combos |
+| 9 | **Benign Pretext Hooks** | +0.15 | "Refund pending", "security update", "chargeback" |
+| 10 | **Channel Shift Request** | +0.20 | "Message me on WhatsApp", "Call this number" |
+| 10b | **UPI/Transfer Request** | +0.15–0.30 | Direct payment demands ("pay", "transfer") with UPI IDs |
+| 11 | **Obfuscation Detection** | +0.25 | Leetspeak, spaced text, SMS abbreviations |
 | 12 | **Remote Access** | +0.35 | "AnyDesk", "TeamViewer", "screen share" |
 | 13 | **Government Authority** | +0.25 | "CBI", "ED", "Income Tax", "arrest warrant" |
 | 14 | **Charity/Donation Scams** | +0.20 | "donation", "temple", "orphanage" + UPI |
@@ -645,10 +646,10 @@ flowchart TD
 | 2 | Gemini (Key 1→2) | `gemini-2.5-flash-lite` | Lite version of 2.5 |
 | 3 | Gemini (Key 1→2) | `gemini-2.0-flash-lite` | Lite version of 2.0 |
 | 4 | Gemini (Key 1→2) | `gemini-2.5-flash` | Full version (lower quota) |
-| 5 | **Grok / xAI** | `grok-3-mini-fast` | **Fallback when all Gemini exhausted** |
+| 5 | **Groq Cloud** | `llama-3.3-70b-versatile` | **Fallback Llama 3 model via Groq** |
 | 6 | Static | Pre-built responses | Final safety net (50+ responses) |
 
-> 🔑 **Key Rotation Strategy**: Each request rotates to the next Gemini API key (round-robin). On rate limit (429), the system also swaps to the other key before moving to the next model. This effectively gives **8 Gemini attempts** (4 models × 2 keys) before falling back to Grok.
+> 🔑 **Key Rotation Strategy**: Each request rotates to the next Gemini API key (round-robin). On rate limit (429), the system also swaps to the other key before moving to the next model. This effectively gives **8 Gemini attempts** (4 models × 2 keys) before falling back to Groq.
 
 ### Language Mirroring
 
@@ -847,6 +848,26 @@ On every API request, the system **re-extracts intelligence** from all previous 
 - ✅ **Message count recovery** — `message_count` is recalculated from `conversationHistory` length, not stored state
 
 ### When Callback is Triggered
+
+The callback logic balances **collecting enough intelligence** vs **reporting quickly**. It uses a tiered approach:
+
+```mermaid
+flowchart TD
+    Start[📩 New Message Processed] --> Scam{Is Scam?}
+    Scam -->|No| Stop[❌ No Callback]
+    Scam -->|Yes| Intel{Check Intelligence}
+    
+    Intel -->|3+ Items & >10 msgs| Send[📤 Send Callback]
+    Intel -->|2 Items & >15 msgs| Send
+    Intel -->|1 Item & >20 msgs| Send
+    Intel -->|Keywords & >25 msgs| Send
+    Intel -->|Max Turns (35)| Send
+    
+    Intel -->|Not Enough| Wait[⏳ Continue Engagement]
+    
+    Send --> Async[🚀 Async POST to GUVI]
+    Async --> Done[✅ Done (Mark Session Sent)]
+```
 
 The system sends a callback to GUVI when:
 
