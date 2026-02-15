@@ -657,9 +657,17 @@ class ScamDetector:
             if len(clean_phone) >= 10:
                 # Extract 10-digit core (last 10 digits to handle +91 prefix)
                 phone_10digit = clean_phone[-10:]
-                # Skip if the phone number is part of a longer bank account number
-                if any(phone_10digit in acc for acc in account_digit_exclusions):
+                
+                # Check if this phone number is part of a bank account substring
+                # BUT: If the original match has +91 prefix, it's definitely a standalone phone
+                has_91_prefix = phone.strip().startswith('+91') or clean_phone.startswith('+91') or clean_phone.startswith('91')
+                
+                # Skip ONLY if:
+                # 1. The phone doesn't have +91 prefix (meaning it could be extracted from bank acct)
+                # 2. AND the 10-digit part is found within a longer bank account
+                if not has_91_prefix and any(phone_10digit in acc for acc in account_digit_exclusions):
                     continue
+                    
                 # Store ORIGINAL format from message (for evaluation matching)
                 formatted_phones.append(phone)  # Keep original with dashes/spaces
                 # Also store normalized version for broader matching
