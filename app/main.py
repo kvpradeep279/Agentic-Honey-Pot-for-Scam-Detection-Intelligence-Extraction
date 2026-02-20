@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Agentic Honey-Pot API",
     description="AI-powered honeypot for scam detection and intelligence extraction",
-    version="1.0.0",
+    version="3.0.0",
     lifespan=lifespan
 )
 
@@ -113,7 +113,7 @@ async def root():
     return {
         "status": "online",
         "service": "Agentic Honey-Pot API",
-        "version": "1.0.0"
+        "version": "3.0.0"
     }
 
 
@@ -295,9 +295,13 @@ async def honeypot_endpoint(
     
     # Step 7: Build simple response (as per Section 8 of problem statement)
     # Only return status and reply - detailed data goes in callback
+    # SAFEGUARD: Ensure reply is never empty
+    if not agent_response:
+        agent_response = honeypot_agent._fast_fallback_response(current_message.text)
+    
     response = HoneypotResponse(
         status="success",
-        reply=agent_response
+        reply=agent_response or "I understand, please tell me more details."
     )
     
     # Step 8: Check if we should send callback
