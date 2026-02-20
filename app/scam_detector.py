@@ -167,9 +167,11 @@ class ScamDetector:
         # Compile regex patterns for better performance
         # WHY regex: Catches structured data like account numbers
         
-        # UPI ID pattern: username@bankname
+        # UPI ID pattern: username@bankhandle
+        # Known UPI handles: ybl, paytm, okicici, okhdfcbank, oksbi, okaxis, upi, apl, ibl, etc.
+        # FIXED: Must end with known UPI handle OR short handle (2-10 chars), NOT email domain
         self.upi_pattern = re.compile(
-            r'[a-zA-Z0-9._-]+@[a-zA-Z]+',
+            r'[a-zA-Z0-9._-]+@(?:ybl|paytm|okicici|okhdfcbank|oksbi|okaxis|upi|apl|ibl|axl|sbi|icici|hdfc|axis|kotak|pnb|boi|bob|cbi|ubi|indian|indus|idbi|rbl|yes|federal|bandhan|fino|nsdl|airtel|jio|phonepe|freecharge|mobikwik|amazonpay|google|gpay|whatsapp|fakebank|[a-z]{2,8})\b',
             re.IGNORECASE
         )
         
@@ -232,8 +234,9 @@ class ScamDetector:
         )
         
         # Policy Numbers: LIC12345678, POLICY-2024-001, INS123456
+        # FIXED: Must contain at least one digit (not just letters like 'account')
         self.policy_pattern = re.compile(
-            r'\b(?:POLICY|LIC|ICICI|HDFC|SBI|INS)[#:\-\s]*([A-Z0-9\-]{6,15})\b',
+            r'\b(?:POLICY|LIC|INS)[-#:\s]*([A-Z]*\d[A-Z0-9\-]{5,14})\b',
             re.IGNORECASE
         )
         
@@ -628,9 +631,21 @@ class ScamDetector:
                 upi_set.add(normalized)
         
         # Filter out common email-like patterns that aren't UPI
+        # Also exclude if the UPI ID is a prefix of any extracted email
+        email_matches = self.email_pattern.findall(message)
+        email_prefixes = {email.split('.com')[0].split('.co.in')[0].split('.in')[0].split('.org')[0] 
+                          for email in email_matches}
+        
+        # Filter out UPI IDs that contain email-specific domains
+        # FIXED: Only check for domain TLDs at the END (like .com, .in) not substrings
         upi_set = {upi for upi in upi_set if not any(
-            domain in upi.lower() for domain in ['gmail', 'yahoo', 'hotmail', 'outlook', 'email']
+            upi.lower().endswith(suffix) for suffix in ['.com', '.in', '.org', '.net', '.co.in']
+        ) and not any(
+            domain in upi.lower().split('@')[1] if '@' in upi else False 
+            for domain in ['gmail', 'yahoo', 'hotmail', 'outlook']
         )}
+        # Remove UPI IDs that are prefixes of emails (e.g., 'user@domain' from 'user@domain.com')
+        upi_set = {upi for upi in upi_set if upi not in email_prefixes}
         intel.upiIds = list(upi_set)
         
         # Precompute spaced digit chunks once (used for phone + account extraction)
@@ -670,10 +685,10 @@ class ScamDetector:
         # IMPORTANT: Keep ORIGINAL format for evaluation matching!
         # Evaluator checks: fake_value IN extracted_value
         # So if fake is '+91-9876543210', we need to store that exact format
-        formatted_phones = []
-        phone_numbers_10digit = []  # Track 10-digit phone numbers for filtering
+        # FIXED: Deduplicate by 10-digit core to avoid duplicates like +91-X and +91X
+        formatted_phones = {}  # Use dict: 10-digit -> best format
         for phone in phone_matches:
-            clean_phone = re.sub(r'[-\s]', '', phone)
+            clean_phone = re.sub(r'[-\\s]', '', phone)
             if len(clean_phone) >= 10:
                 # Extract 10-digit core (last 10 digits to handle +91 prefix)
                 phone_10digit = clean_phone[-10:]
@@ -688,11 +703,14 @@ class ScamDetector:
                 if not has_91_prefix and any(phone_10digit in acc for acc in account_digit_exclusions):
                     continue
                     
-                # Store ORIGINAL format from message (for evaluation matching)
-                formatted_phones.append(phone)  # Keep original with dashes/spaces
-                # Also store normalized version for broader matching
-                formatted_phones.append(clean_phone)
-                phone_numbers_10digit.append(phone_10digit)
+                # Store BEST format: Prefer +91 prefixed version
+                if phone_10digit not in formatted_phones:
+                    formatted_phones[phone_10digit] = phone
+                elif has_91_prefix and '+91' not in formatted_phones[phone_10digit]:
+                    # Replace with +91 prefixed version
+                    formatted_phones[phone_10digit] = phone
+        
+        phone_numbers_10digit = list(formatted_phones.keys())
         
         # Also extract spaced phone numbers: "98 765 432 10" or "9-8-7-6-5-4-3-2-1-0"
         spaced_phone_pattern = re.compile(r'\b(\d[\s\-\.]+(?:\d[\s\-\.]*){8,9}\d)\b')
@@ -702,9 +720,8 @@ class ScamDetector:
             normalized = re.sub(r'[\s\-\.]', '', match)
             if len(normalized) == 10 and normalized[0] in '6789':
                 # Looks like an Indian phone number
-                if normalized not in phone_numbers_10digit:
-                    formatted_phones.append(normalized)
-                    phone_numbers_10digit.append(normalized)
+                if normalized not in formatted_phones:
+                    formatted_phones[normalized] = normalized
         
         # Also extract spaced digits that look like phone numbers
         # Find all matches of spaced digits in the message
@@ -713,13 +730,11 @@ class ScamDetector:
             normalized = re.sub(r'[\s\-\.]', '', chunk)
             if len(normalized) == 10 and normalized[0] in '6789':
                 # Looks like an Indian phone number
-                if normalized not in phone_numbers_10digit and not any(normalized in acc for acc in account_digit_exclusions):
-                    formatted_phones.append(normalized)
-                    phone_numbers_10digit.append(normalized)
+                if normalized not in formatted_phones and not any(normalized in acc for acc in account_digit_exclusions):
+                    formatted_phones[normalized] = normalized
         
-        phone_set = set(formatted_phones)
-        phone_set_10digit = set(phone_numbers_10digit)
-        intel.phoneNumbers = list(phone_set)
+        phone_numbers_10digit = list(formatted_phones.keys())
+        intel.phoneNumbers = list(formatted_phones.values())
 
         # Build a comprehensive phone exclusion set for filtering bank accounts
         # This includes all variations: 10-digit, +91 prefix, 91 prefix, etc.

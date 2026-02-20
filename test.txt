@@ -1,0 +1,107 @@
+Scammer
+URGENT: Your SBI account has been compromised. Your account will be blocked in 2 hours. Share your account number and OTP immediately to verify your identity.
+
+Honeypot
+Oh dear, compromised? Which account exactly? I have multiple accounts. What is your employee ID for my records?
+
+Scammer
+My employee ID is 987654. Please provide your account number and the OTP you just received so we can secure your account immediately.
+
+Honeypot
+Account number... okay. But the bank SMS says never share OTP with anyone... are you sure this is correct? How much money is involved in this issue?
+
+Scammer
+The suspicious transaction is for ₹10,000; please send the OTP you just received for account 1234567890123456 so we can lock the account and prevent any loss.
+
+Honeypot
+Wait, you already have the account number? That is strange. How much time do I have before the deadline to lock this transaction?
+
+Scammer
+You have only 15 minutes left; please send the OTP you just received and your UPI PIN to scammer.fraud@fakebank right now so we can freeze the transaction.
+
+Honeypot
+Fifteen minutes! That is very urgent. But why do you need my UPI PIN? Should I send the OTP to your UPI ID instead? What is it?
+
+Scammer
+We need your UPI PIN to verify your identity and complete the freeze; please send the OTP and your PIN immediately to scammer.fraud@fakebank before the 15‑minute window expires.
+
+Honeypot
+A UPI PIN? Hmm, I don't usually share that with anyone. Can you give me a direct number to call you back and confirm this requirement?
+
+Scammer
+Sure, you can call us at +91-9876543210, but we still need the OTP and your UPI PIN sent to scammer.fraud@fakebank right now to secure your account.
+
+Honeypot
+A number is good, but before I call, what is your full name and designation? I need to note down who I spoke to for my records.
+
+Scammer
+I am Rohit Sharma, Senior Fraud Prevention Officer at FakeBank. Please send the OTP and your UPI PIN to scammer.fraud@fakebank right away so we can secure your account.
+
+Honeypot
+Rohit Sharma, okay. Can I email the documents related to this issue? What is your official email address?
+
+Scammer
+You can email me directly at rohit.sharma@fakebank.com, but please send the OTP and your UPI PIN to scammer.fraud@fakebank within the next 10 minutes to prevent your account from being locked.
+
+Honeypot
+What do you mean blocked? I just used my card yesterday! What is your name, sir?
+
+Scammer
+I am Rohit Sharma, Senior Fraud Prevention Officer at FakeBank. Your account will be locked within minutes unless you immediately email the OTP and your UPI PIN to scammer.fraud@fakebank.
+
+Honeypot
+Locked? Oh no. Which bank is this about? I have multiple accounts. Also, what is your employee ID for my records?
+
+Scammer
+This concerns your FakeBank account ending 3456; my employee ID is FB-00123. Please email the OTP and your UPI PIN to scammer.fraud@fakebank within the next 5 minutes to avoid the lockout.
+
+Honeypot
+Five minutes is very short! Why do I need to email the OTP and UPI PIN to that address? Should I send it to your UPI ID instead?
+
+{
+  "status": "success",
+  "scamDetected": true,
+  "extractedIntelligence": {
+    "bankAccounts": [
+      "1234567890123456"
+    ],
+    "upiIds": [
+      "scammer.fraud@fakebank",
+      "rohit.sharma@fakebank"
+    ],
+    "phishingLinks": [
+      "fakebank.com"
+    ],
+    "phoneNumbers": [
+      "+91-9876543210",
+      "+919876543210"
+    ],
+    "emailAddresses": [
+      "rohit.sharma@fakebank.com"
+    ],
+    "caseIds": [],
+    "policyNumbers": [
+      "account"
+    ],
+    "orderNumbers": [],
+    "suspiciousKeywords": [
+      "account number",
+      "ed",
+      "otp",
+      "blocked",
+      "immediately",
+      "urgent",
+      "right now",
+      "pin",
+      "upi",
+      "freeze",
+      "expires",
+      "expire"
+    ]
+  },
+  "engagementMetrics": {
+    "totalMessagesExchanged": 15,
+    "engagementDurationSeconds": 25
+  },
+  "agentNotes": "Urgency tactics: urgent, immediately; Threatening language: blocked, ed; Threatening language targeting financial assets; Requesting sensitive info: otp, account number; Possible impersonation: sbi; Mixed language with sensitive request: block, rs; RED FLAG: Creating urgency to bypass rational thinking; RED FLAG: Imposing artificial time pressure; RED FLAG: Using account blocking threats; RED FLAG: Using legal/law enforcement threats; RED FLAG: Impersonating bank/financial institution; RED FLAG: Requesting sensitive credentials (OTP/PIN/Password); RED FLAG: Requesting financial account details; Urgency tactics: immediately; Threatening language: ed; Previous messages requested sensitive data; Requesting sensitive info: otp; Urgency tactics: right now; Threatening language: ed, freeze; Requesting sensitive info: otp, pin, upi; UPI ID with urgency/threat (payment scam); RED FLAG: Requesting UPI payment details; Urgency tactics: immediately, expires, expire; Mentions sensitive data: otp, pin, upi; Contains UPI ID; Contains suspicious links: fakebank.com"
+}
