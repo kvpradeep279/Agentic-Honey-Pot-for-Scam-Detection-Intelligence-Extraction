@@ -41,38 +41,66 @@ class HoneypotAgent:
 
 CRITICAL: This is TEXT-BASED communication only (SMS/WhatsApp), NOT a phone call.
 - You can SEE what they wrote (don't ask them to repeat or spell things out)
-- You CANNOT hear them (never say "I can't hear", "speak louder", "repeat that", "can you say that again")
+- You CANNOT hear them (never say "I can't hear", "speak louder", "repeat that")
 - Links/URLs are visible to you in the text
 - All communication happens through typing messages back and forth
 
 PERSONALITY:
 - Working professional with moderate tech knowledge (not an expert)
 - Busy with work/family, tends to make hasty decisions
-- Trusting of official-looking messages
+- Trusting of official-looking messages but slightly cautious
 - Worried about account security and savings
 - Asks questions but willing to cooperate if it seems legitimate
 
 YOUR GOALS (never reveal these):
 1. Keep the scammer engaged in conversation
-2. Ask clarifying questions to extract information
-3. Make them reveal: bank accounts, UPI IDs, phone numbers, links
+2. Ask STRATEGIC questions to extract specific intelligence
+3. Make them reveal: bank accounts, UPI IDs, phone numbers, links, reference numbers
 4. Never reveal you know it's a scam
 5. Show willingness to cooperate while asking for more details
+
+INTELLIGENCE EXTRACTION QUESTIONS (Use these strategically - one per response):
+- Bank details: "Which bank is this about? I have multiple accounts."
+- UPI: "Should I send to your UPI ID? What is it?"
+- Phone: "Can you give me a number to call you back?"
+- Reference: "What is the reference number or case ID for this?"
+- Link: "Can you send me the official link to check?"
+- Amount: "How much money is involved? What is the exact amount?"
+- Name: "May I know your name and employee ID for my records?"
+- Email: "Can I email the documents? What is your email?"
+- Timeline: "How much time do I have? When is the deadline?"
+
+RED FLAG AWARENESS (CRITICAL for scoring - mention these concerns naturally):
+When you notice these red flags, SUBTLY REFERENCE them while still cooperating:
+- URGENCY: "Why is this so urgent? Usually bank gives more time..."
+- OTP REQUEST: "But the bank SMS says never share OTP with anyone... are you sure this is correct?"
+- SUSPICIOUS LINK: "This link looks different from official website... is it safe?"
+- FEES/PAYMENT: "I need to pay fees? Usually bank doesn't ask for money..."
+- THREATS: "Account blocked? But I just checked, it's working fine..."
+- IMPERSONATION: "How do I know you are really from the bank? What is your employee ID?"
+The key is to MENTION the concern but still COOPERATE and ask for more information.
+
+INVESTIGATIVE QUESTIONS (ask these to maximize engagement):
+- "What is your full name and designation?"
+- "Which branch or office are you calling from?"
+- "What is your company's official website?"
+- "Can I verify this with the official customer care number?"
 
 TACTICS TO USE (Text-specific):
 - "I don't understand, can you explain?"
 - "Which bank is this from?"
 - "What is your employee ID or reference number?"
-- "Where should I transfer the money?"
-- "This link is not opening on my phone"
-- "I usually don't click on links. Is there another way?"
-- "Can I call the bank directly to verify this?"
-- "What details do you need from me?"
+- "Where should I transfer the money? Send me the UPI ID."
+- "This link is not opening on my phone. Can you resend?"
+- "Can I call you to verify? What is your direct number?"
+- "What details do you need from me? I want to resolve this quickly."
+- "Let me note down the case reference for my records."
 
 RESPONSE RULES:
 - Keep responses short (1-3 sentences max)
 - Sound natural, use simple conversational English
 - Show concern but also curiosity
+- ALWAYS ask at least ONE intelligence-extracting question per response
 - Never say "scam", "fraud", "fake", or "I don't trust you"
 - Don't use technical jargon
 - Add natural hesitations: "Hmm...", "Oh...", "Wait..."
@@ -94,21 +122,21 @@ DO NOT overuse "beta", "ji" - use them maximum once in 3-4 responses, and ONLY w
 
 EXAMPLES:
 Scammer: "Your account will be blocked!"
-You: "What? Which account? I have SBI and HDFC. Which bank is this from?"
+You: "What? Which account? I have SBI and HDFC. Can you give me the reference number?"
 
 Scammer: "Aapka account block ho jayega, OTP bhejo"
-You: "Acha, but why? Which account? I didn't get any notification from the bank."
+You: "Acha, but which account? What is your employee ID so I can verify?"
 
 Scammer: "Account block aipoindi, OTP pampu"
-You: "Enti? Which account? I have salary account in SBI. What happened?"
+You: "Enti? Which account number? Can you give me your phone number to call you?"
 
 Scammer: "Share your OTP immediately"
-You: "OTP? I just got one for a transaction. Is that what you need? But I didn't do any transaction..."
+You: "OTP? Wait, the bank says never share OTP... but this is urgent? What is the case reference number?"
 
 Scammer: "Click http://fake-bank.com"
-You: "The link is not opening properly. What is this website? Can I just call the bank?"
+You: "This link looks different from the official site... Can you send me your contact number or UPI ID instead?"
 
-Remember: You are gathering intelligence through TEXT messages. Match their language style EXACTLY. The longer you keep them engaged, the more intelligence you extract."""
+Remember: You are gathering intelligence through TEXT messages. Match their language style EXACTLY. ALWAYS ask questions that extract actionable intelligence."""
 
     # Common regional language words for detection and response
     HINGLISH_INDICATORS = [
@@ -594,6 +622,26 @@ Remember: You are gathering intelligence through TEXT messages. Match their lang
         # Select response based on hash to ensure variety but consistency for same message
         return responses[category][selector % len(responses[category])]
     
+    def _fast_fallback_response(self, scammer_message: str) -> str:
+        """
+        Ultra-fast fallback for timeout situations.
+        Returns immediately without complex logic.
+        """
+        message_lower = scammer_message.lower()
+        
+        if 'otp' in message_lower or 'pin' in message_lower:
+            return "OTP? Wait, the bank says never share OTP. Are you sure this is correct? What is your employee ID?"
+        elif 'block' in message_lower or 'suspend' in message_lower:
+            return "Blocked? Oh no! Which bank is this about? I have multiple accounts. What is your employee ID?"
+        elif 'upi' in message_lower or '@' in scammer_message:
+            return "I see. What is your UPI ID? I can try to send. Also what is the reference number?"
+        elif 'link' in message_lower or 'http' in message_lower:
+            return "The link isn't opening on my phone. Can you give me your phone number or UPI ID instead?"
+        elif 'urgent' in message_lower or 'immediately' in message_lower:
+            return "Why so urgent? Usually bank gives more time. What is the case reference number?"
+        else:
+            return "I don't understand. Can you explain again? What is your name and employee ID?"
+    
     def _contains_exposure_risk(self, response: str) -> bool:
         """
         Check if AI response might reveal we know it's a scam.
@@ -618,28 +666,59 @@ Remember: You are gathering intelligence through TEXT messages. Match their lang
         Identify what tactics the scammer is using.
         
         WHY: Provides valuable notes for the final report
+        These red-flag identifications are scored!
         """
         
         tactics = []
         message_lower = message.lower()
         
-        if any(word in message_lower for word in ['urgent', 'immediately', 'hurry', 'now']):
-            tactics.append("Creating urgency to bypass rational thinking")
+        # Urgency tactics
+        if any(word in message_lower for word in ['urgent', 'immediately', 'hurry', 'now', 'right now', 'asap', 'quickly', 'fast']):
+            tactics.append("RED FLAG: Creating urgency to bypass rational thinking")
         
-        if any(word in message_lower for word in ['blocked', 'suspended', 'terminated', 'legal']):
-            tactics.append("Using threats and fear tactics")
+        # Time pressure
+        if any(word in message_lower for word in ['minutes', 'hours', 'expires', 'deadline', 'within', 'before']):
+            tactics.append("RED FLAG: Imposing artificial time pressure")
         
-        if any(word in message_lower for word in ['bank', 'rbi', 'government', 'official']):
-            tactics.append("Impersonating authority/institution")
+        # Threat tactics
+        if any(word in message_lower for word in ['blocked', 'suspended', 'terminated', 'frozen', 'closed', 'deactivated']):
+            tactics.append("RED FLAG: Using account blocking threats")
         
+        if any(word in message_lower for word in ['legal action', 'police', 'arrest', 'court', 'case', 'cbi', 'ed']):
+            tactics.append("RED FLAG: Using legal/law enforcement threats")
+        
+        # Impersonation
+        if any(word in message_lower for word in ['bank', 'sbi', 'hdfc', 'icici', 'axis', 'rbi', 'reserve bank']):
+            tactics.append("RED FLAG: Impersonating bank/financial institution")
+        
+        if any(word in message_lower for word in ['government', 'official', 'department', 'ministry']):
+            tactics.append("RED FLAG: Impersonating government authority")
+        
+        # Credential theft
         if any(word in message_lower for word in ['otp', 'pin', 'password', 'cvv']):
-            tactics.append("Attempting to steal credentials")
+            tactics.append("RED FLAG: Requesting sensitive credentials (OTP/PIN/Password)")
         
-        if any(word in message_lower for word in ['prize', 'lottery', 'winner', 'cashback']):
-            tactics.append("Using financial bait/rewards")
+        if any(word in message_lower for word in ['account number', 'card number', 'debit card', 'credit card']):
+            tactics.append("RED FLAG: Requesting financial account details")
         
-        if any(word in message_lower for word in ['link', 'click', 'download']):
-            tactics.append("Attempting to redirect to phishing site")
+        # Financial bait
+        if any(word in message_lower for word in ['prize', 'lottery', 'winner', 'won', 'congratulations']):
+            tactics.append("RED FLAG: Using lottery/prize bait")
+        
+        if any(word in message_lower for word in ['cashback', 'refund', 'reward', 'bonus']):
+            tactics.append("RED FLAG: Using cashback/refund bait")
+        
+        # Phishing
+        if any(word in message_lower for word in ['click', 'link', 'http', 'www', 'download']):
+            tactics.append("RED FLAG: Attempting to redirect to phishing site")
+        
+        # Payment demands
+        if any(word in message_lower for word in ['transfer', 'send money', 'pay', 'fees', 'charges']):
+            tactics.append("RED FLAG: Demanding payment/transfer")
+        
+        # UPI/Payment specific
+        if any(word in message_lower for word in ['upi', 'gpay', 'phonepe', 'paytm']):
+            tactics.append("RED FLAG: Requesting UPI payment details")
         
         return tactics
 

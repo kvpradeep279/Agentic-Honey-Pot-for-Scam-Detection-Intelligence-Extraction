@@ -17,6 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import time
 
 from app.models import (
     HoneypotRequest, 
@@ -29,6 +31,10 @@ from app.agent import honeypot_agent
 from app.session_manager import session_manager
 from app.callback_handler import callback_handler
 from app.config import config
+
+
+# Global thread pool executor for AI calls (prevents resource exhaustion)
+_executor = ThreadPoolExecutor(max_workers=20)
 
 
 # ----- Application Lifespan -----
@@ -237,14 +243,34 @@ async def honeypot_endpoint(
         for reason in reasons:
             session.add_agent_note(reason)
     
-    # Step 5: Generate agent response
-    # IMPORTANT: Always respond! Don't reveal detection by staying silent.
-    # Even if we don't think it's a scam, respond naturally to maintain cover.
-    agent_response = honeypot_agent.generate_response(
-        current_message=current_message,
-        conversation_history=parsed_history,
-        metadata=Metadata(**metadata) if metadata else None
-    )
+    # Step 5: Generate agent response with TIMEOUT
+    # CRITICAL: Must respond under 30 seconds! Use 20s timeout for AI.
+    start_time = time.time()
+    
+    async def generate_with_timeout():
+        """Run AI generation in thread pool with timeout."""
+        loop = asyncio.get_event_loop()
+        return await asyncio.wait_for(
+            loop.run_in_executor(
+                _executor,
+                lambda: honeypot_agent.generate_response(
+                    current_message=current_message,
+                    conversation_history=parsed_history,
+                    metadata=Metadata(**metadata) if metadata else None
+                )
+            ),
+            timeout=20.0  # 20 seconds max
+        )
+    
+    try:
+        agent_response = await generate_with_timeout()
+        print(f"⏱️ AI response in {time.time() - start_time:.2f}s")
+    except asyncio.TimeoutError:
+        print(f"⚠️ AI timeout after 20s, using fallback")
+        agent_response = honeypot_agent._fast_fallback_response(current_message.text)
+    except Exception as e:
+        print(f"⚠️ AI error: {e}, using fallback")
+        agent_response = honeypot_agent._fast_fallback_response(current_message.text)
     
     # Analyze scammer tactics for notes (only if scam detected)
     if session.scam_detected:

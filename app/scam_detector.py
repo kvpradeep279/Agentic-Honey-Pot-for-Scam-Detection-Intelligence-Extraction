@@ -223,6 +223,26 @@ class ScamDetector:
             re.IGNORECASE
         )
         
+        # ----- Feb 19 Update: New Intelligence Types -----
+        # Case IDs: REF-2023-9876, CASE123456, TXN-001, TICKET#12345
+        # Pattern requires prefix at word boundary (start or after space/punctuation)
+        self.case_id_pattern = re.compile(
+            r'(?:^|[\s,;])(?:REF|CASE|TXN|TICKET|COMPLAINT)[-#:\s]+([A-Z0-9]+-?[A-Z0-9\-]{3,15})\b',
+            re.IGNORECASE
+        )
+        
+        # Policy Numbers: LIC12345678, POLICY-2024-001, INS123456
+        self.policy_pattern = re.compile(
+            r'\b(?:POLICY|LIC|ICICI|HDFC|SBI|INS)[#:\-\s]*([A-Z0-9\-]{6,15})\b',
+            re.IGNORECASE
+        )
+        
+        # Order Numbers: ORD123456, ORDER-2024-001, TRACKING#12345
+        self.order_pattern = re.compile(
+            r'\b(?:ORDER|ORD|TRACKING|AWB|SHIPMENT)[#:\-\s]*([A-Z0-9\-]{6,20})\b',
+            re.IGNORECASE
+        )
+        
         # ----- Legitimate Message Patterns (False Positive Guards) -----
         # WHY: Avoid flagging real bank notifications
         self.legitimate_patterns = [
@@ -794,6 +814,19 @@ class ScamDetector:
         )
         found_keywords = [kw for kw in all_keywords if kw in message_lower]
         intel.suspiciousKeywords = list(set(found_keywords))
+        
+        # ----- Feb 19: Extract Case IDs, Policy Numbers, Order Numbers -----
+        # Case IDs (REF, CASE, TXN, TICKET, etc.)
+        case_matches = self.case_id_pattern.findall(message)
+        intel.caseIds = list(set(case_matches))
+        
+        # Policy Numbers (LIC, POLICY, INS, etc.)
+        policy_matches = self.policy_pattern.findall(message)
+        intel.policyNumbers = list(set(policy_matches))
+        
+        # Order Numbers (ORDER, ORD, AWB, TRACKING, etc.)
+        order_matches = self.order_pattern.findall(message)
+        intel.orderNumbers = list(set(order_matches))
         
         return intel
     

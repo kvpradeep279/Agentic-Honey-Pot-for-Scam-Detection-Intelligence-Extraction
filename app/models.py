@@ -67,12 +67,16 @@ class ExtractedIntelligence(BaseModel):
     WHY these specific fields:
     - These are exactly what GUVI expects
     - Each represents actionable intelligence for law enforcement
+    - Feb 19 Update: Added caseIds, policyNumbers, orderNumbers
     """
     bankAccounts: List[str] = Field(default=[], description="Bank account numbers found")
     upiIds: List[str] = Field(default=[], description="UPI IDs like 'name@bank'")
     phishingLinks: List[str] = Field(default=[], description="Malicious URLs")
     phoneNumbers: List[str] = Field(default=[], description="Phone numbers mentioned")
     emailAddresses: List[str] = Field(default=[], description="Email addresses found")
+    caseIds: List[str] = Field(default=[], description="Case/reference IDs mentioned")
+    policyNumbers: List[str] = Field(default=[], description="Insurance policy numbers")
+    orderNumbers: List[str] = Field(default=[], description="Order/tracking IDs")
     suspiciousKeywords: List[str] = Field(default=[], description="Keywords indicating scam")
 
 

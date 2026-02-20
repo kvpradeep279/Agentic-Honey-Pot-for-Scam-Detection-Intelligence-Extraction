@@ -41,7 +41,7 @@ class CallbackHandler:
         - Must have extracted real intelligence (not just keywords)
         - Prevent duplicate callbacks
         
-        FINALS: Max 10 turns! Callback timing adjusted accordingly.
+        FINALS: Max 10 turns! Wait until late (turn 9) for complete intel extraction.
         """
         
         # Prevent duplicate callbacks
@@ -67,21 +67,16 @@ class CallbackHandler:
             len(intel.emailAddresses)
         )
         
-        has_real_intel = real_intel_count > 0
-        has_multiple_intel = real_intel_count >= 2  # Multiple pieces of real intel
         has_rich_intel = real_intel_count >= 3  # Rich intelligence (3+ items)
         has_keywords = len(intel.suspiciousKeywords) >= 2
         
-        # FINALS STRATEGY (max 10 turns!):
-        # Evaluator does UP TO 10 turns - we need to callback before conversation ends
-        # Each turn = 1 scammer msg + 1 agent reply = 2 messages in history
-        # So 10 turns = ~20 messages max
+        # FINALS STRATEGY (max 10 turns = 20 messages):
+        # WAIT LONGER - scammers reveal UPI/links late in conversation!
         # 
-        # AGGRESSIVE TIMING - Send callback early with any intel:
-        # 1. Force send at turn 8+ (16 messages) - leave buffer before max
-        # 2. With ANY real intel - send at turn 3+ (6 messages)
-        # 3. With keywords only - send at turn 5+ (10 messages)
-        # 4. Max safety - send at turn 10 (20 messages)
+        # Conservative timing - maximize intelligence extraction:
+        # 1. Turn 9 (18+ messages): Send with ANY intel found
+        # 2. Turn 10 (20 messages): Force send (max turns)
+        # 3. Rich intel (3+ items) at turn 7: OK to send early
         
         msg_count = session.message_count
         
@@ -89,24 +84,16 @@ class CallbackHandler:
         if msg_count >= config.MAX_CONVERSATION_TURNS:
             return True
         
-        # AGGRESSIVE: Any real intel + 3+ turns - SEND NOW!
-        if has_real_intel and msg_count >= 6:
+        # Turn 9+: Send with any intel or keywords
+        if msg_count >= 18 and (real_intel_count > 0 or has_keywords):
             return True
         
-        # Multiple intel found - send immediately at turn 2+
-        if has_multiple_intel and msg_count >= 4:
+        # Rich intel (3+ items) - OK to send at turn 7+
+        if has_rich_intel and msg_count >= 14:
             return True
         
-        # Rich intel - send at turn 2
-        if has_rich_intel and msg_count >= 4:
-            return True
-        
-        # Only keywords - wait a bit longer but not too long
-        if has_keywords and msg_count >= 10:
-            return True
-        
-        # Safety: Force send at turn 8 even with no intel
-        if msg_count >= 16:
+        # Absolute minimum: turn 9 even with nothing
+        if msg_count >= 18:
             return True
         
         # Keep engaging - not ready yet
@@ -129,24 +116,29 @@ class CallbackHandler:
         session.callback_sent = True
         
         try:
-            # Build payload matching GUVI's expected format (FINALS VERSION)
-            # Required fields: status, scamDetected, extractedIntelligence
-            # Optional fields: engagementMetrics, agentNotes, scamType
+            # Build payload matching GUVI's expected format (Feb 19 VERSION)
+            # Required: sessionId, scamDetected, extractedIntelligence
+            # Optional: scamType, confidenceLevel, engagementMetrics, agentNotes
             payload = {
                 "sessionId": session.session_id,
-                "status": "completed",  # Required for Response Structure points!
+                "status": "completed",
                 "scamDetected": session.scam_detected,
-                "scamType": session.scam_type,  # bank_fraud, upi_fraud, phishing, etc.
+                "scamType": session.scam_type,
+                "confidenceLevel": session.scam_confidence,  # Feb 19 (1 pt)
                 "totalMessagesExchanged": session.message_count,
+                "engagementDurationSeconds": session.get_duration_seconds(),
                 "extractedIntelligence": {
                     "bankAccounts": session.intelligence.bankAccounts,
                     "upiIds": session.intelligence.upiIds,
                     "phishingLinks": session.intelligence.phishingLinks,
                     "phoneNumbers": session.intelligence.phoneNumbers,
-                    "emailAddresses": session.intelligence.emailAddresses,  # Added for finals!
+                    "emailAddresses": session.intelligence.emailAddresses,
+                    "caseIds": session.intelligence.caseIds,  # Feb 19
+                    "policyNumbers": session.intelligence.policyNumbers,  # Feb 19
+                    "orderNumbers": session.intelligence.orderNumbers,  # Feb 19
                     "suspiciousKeywords": session.intelligence.suspiciousKeywords
                 },
-                "engagementMetrics": {  # Added for finals! (5 points)
+                "engagementMetrics": {
                     "engagementDurationSeconds": session.get_duration_seconds(),
                     "totalMessagesExchanged": session.message_count
                 },
@@ -193,22 +185,27 @@ class CallbackHandler:
         session.callback_sent = True
         
         try:
-            # Build payload matching GUVI's expected format (FINALS VERSION)
+            # Build payload matching GUVI's expected format (Feb 19 VERSION)
             payload = {
                 "sessionId": session.session_id,
-                "status": "completed",  # Required for Response Structure points!
+                "status": "completed",
                 "scamDetected": session.scam_detected,
-                "scamType": session.scam_type,  # bank_fraud, upi_fraud, phishing, etc.
+                "scamType": session.scam_type,
+                "confidenceLevel": session.scam_confidence,  # Feb 19 (1 pt)
                 "totalMessagesExchanged": session.message_count,
+                "engagementDurationSeconds": session.get_duration_seconds(),
                 "extractedIntelligence": {
                     "bankAccounts": session.intelligence.bankAccounts,
                     "upiIds": session.intelligence.upiIds,
                     "phishingLinks": session.intelligence.phishingLinks,
                     "phoneNumbers": session.intelligence.phoneNumbers,
-                    "emailAddresses": session.intelligence.emailAddresses,  # Added for finals!
+                    "emailAddresses": session.intelligence.emailAddresses,
+                    "caseIds": session.intelligence.caseIds,  # Feb 19
+                    "policyNumbers": session.intelligence.policyNumbers,  # Feb 19
+                    "orderNumbers": session.intelligence.orderNumbers,  # Feb 19
                     "suspiciousKeywords": session.intelligence.suspiciousKeywords
                 },
-                "engagementMetrics": {  # Added for finals! (5 points)
+                "engagementMetrics": {
                     "engagementDurationSeconds": session.get_duration_seconds(),
                     "totalMessagesExchanged": session.message_count
                 },

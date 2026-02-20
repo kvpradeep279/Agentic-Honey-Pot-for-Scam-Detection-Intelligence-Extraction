@@ -79,6 +79,21 @@ class ConversationSession:
             if email not in self.intelligence.emailAddresses:
                 self.intelligence.emailAddresses.append(email)
         
+        # Add unique case IDs (Feb 19)
+        for case_id in new_intel.caseIds:
+            if case_id not in self.intelligence.caseIds:
+                self.intelligence.caseIds.append(case_id)
+        
+        # Add unique policy numbers (Feb 19)
+        for policy in new_intel.policyNumbers:
+            if policy not in self.intelligence.policyNumbers:
+                self.intelligence.policyNumbers.append(policy)
+        
+        # Add unique order numbers (Feb 19)
+        for order in new_intel.orderNumbers:
+            if order not in self.intelligence.orderNumbers:
+                self.intelligence.orderNumbers.append(order)
+        
         # Add unique suspicious keywords
         for keyword in new_intel.suspiciousKeywords:
             if keyword not in self.intelligence.suspiciousKeywords:
